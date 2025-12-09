@@ -2,31 +2,34 @@ import logging
 import os
 import subprocess
 import time
-from typing import Optional
+from typing import Any
 
-from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import Response as FastAPIResponse
+from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import make_asgi_app
 
 from .converter import convert_pdf_to_pdfa
 from .metrics import (
-    REQUEST_COUNT,
     CONVERSION_DURATION,
+    CONVERSION_ERRORS,
     INPUT_SIZE,
     OUTPUT_SIZE,
-    CONVERSION_ERRORS
+    REQUEST_COUNT,
 )
 
 # Configure logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # Constants
 MAX_PDF_SIZE = 50 * 1024 * 1024  # 50MB
-MINIMAL_PDF = b'%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj xref\n0 3\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\ntrailer<</Size 3/Root 1 0 R>>startxref\n110\n%%EOF'
+MINIMAL_PDF = (
+    b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj "
+    b"2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj xref\n0 3\n"
+    b"0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n"
+    b"trailer<</Size 3/Root 1 0 R>>startxref\n110\n%%EOF"
+)
 
 # Configurable endpoint paths via environment variables
 HEALTH_PATH = os.getenv("HEALTH_PATH", "/health")
@@ -37,13 +40,12 @@ CONVERTER_PATH = os.getenv("CONVERTER_PATH", "/api/pdfconverter")
 app = FastAPI(
     title="PDF Converter Service",
     version="1.0.0",
-    description="REST API for converting PDF to PDF/A format"
+    description="REST API for converting PDF to PDF/A format",
 )
 
 
 def is_health_check(request: Request) -> bool:
-    """
-    Check if request is a health check based on X-Health-Check header.
+    """Check if request is a health check based on X-Health-Check header.
 
     Args:
         request: FastAPI Request object
@@ -56,9 +58,8 @@ def is_health_check(request: Request) -> bool:
 
 
 @app.middleware("http")
-async def metrics_middleware(request: Request, call_next) -> Response:
-    """
-    Middleware to collect Prometheus metrics.
+async def metrics_middleware(request: Request, call_next) -> Any:
+    """Middleware to collect Prometheus metrics.
 
     Only records metrics for non-health-check requests.
 
@@ -76,9 +77,6 @@ async def metrics_middleware(request: Request, call_next) -> Response:
     if request.url.path == CONVERTER_PATH:
         start_time = time.time()
 
-        # Store request size for metrics
-        request_size = 0
-
         try:
             response = await call_next(request)
             duration = time.time() - start_time
@@ -89,9 +87,9 @@ async def metrics_middleware(request: Request, call_next) -> Response:
                 CONVERSION_DURATION.observe(duration)
 
                 # Get request and response sizes from state if available
-                if hasattr(request.state, 'input_size'):
+                if hasattr(request.state, "input_size"):
                     INPUT_SIZE.observe(request.state.input_size)
-                if hasattr(request.state, 'output_size'):
+                if hasattr(request.state, "output_size"):
                     OUTPUT_SIZE.observe(request.state.output_size)
 
             return response
@@ -118,9 +116,8 @@ async def metrics_middleware(request: Request, call_next) -> Response:
         return response
 
 
-async def health() -> dict[str, str]:
-    """
-    Basic health check endpoint.
+async def health():
+    """Basic health check endpoint.
 
     Returns:
         Simple status message with 'status' key
@@ -129,8 +126,7 @@ async def health() -> dict[str, str]:
 
 
 async def convert_pdf_endpoint(request: Request) -> Response:
-    """
-    Convert PDF to PDF/A format.
+    """Convert PDF to PDF/A format.
 
     This endpoint accepts a PDF file as raw bytes in the request body
     and returns the converted PDF/A file.
@@ -160,8 +156,7 @@ async def convert_pdf_endpoint(request: Request) -> Response:
         if not content_type.startswith("application/pdf"):
             logger.warning("Invalid Content-Type: %s", content_type)
             raise HTTPException(
-                status_code=415,
-                detail="Content-Type must be application/pdf"
+                status_code=415, detail="Content-Type must be application/pdf"
             )
 
         # Read request body
@@ -169,10 +164,7 @@ async def convert_pdf_endpoint(request: Request) -> Response:
             pdf_bytes = await request.body()
         except Exception as e:
             logger.error("Failed to read request body: %s", e)
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to read request body"
-            )
+            raise HTTPException(status_code=400, detail="Failed to read request body")
 
         # Handle empty body for health checks
         if len(pdf_bytes) == 0:
@@ -181,17 +173,13 @@ async def convert_pdf_endpoint(request: Request) -> Response:
                 logger.debug("Using minimal PDF for health check")
                 pdf_bytes = MINIMAL_PDF
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Empty PDF file"
-                )
+                raise HTTPException(status_code=400, detail="Empty PDF file")
 
         # Validate size
         if len(pdf_bytes) > MAX_PDF_SIZE:
             logger.warning("PDF too large: %d bytes", len(pdf_bytes))
             raise HTTPException(
-                status_code=413,
-                detail=f"PDF file too large (max {MAX_PDF_SIZE} bytes)"
+                status_code=413, detail=f"PDF file too large (max {MAX_PDF_SIZE} bytes)"
             )
 
         # Store input size in request state for metrics
@@ -205,24 +193,15 @@ async def convert_pdf_endpoint(request: Request) -> Response:
         except ValueError as e:
             # Invalid PDF format
             logger.warning("Invalid PDF: %s", e)
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid PDF: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid PDF: {str(e)}")
         except subprocess.CalledProcessError as e:
             # Conversion failed
             logger.error("Conversion failed: %s", e)
-            raise HTTPException(
-                status_code=422,
-                detail="PDF conversion failed"
-            )
-        except Exception as e:
+            raise HTTPException(status_code=422, detail="PDF conversion failed")
+        except Exception:
             # Unexpected error
             logger.exception("Unexpected error during conversion")
-            raise HTTPException(
-                status_code=500,
-                detail="Internal server error"
-            )
+            raise HTTPException(status_code=500, detail="Internal server error")
 
         # Store output size in request state for metrics
         request.state.output_size = len(output_bytes)
@@ -233,28 +212,25 @@ async def convert_pdf_endpoint(request: Request) -> Response:
         return Response(
             content=output_bytes,
             media_type="application/pdf",
-            headers={
-                "Content-Disposition": 'inline; filename="converted.pdf"'
-            }
+            headers={"Content-Disposition": 'inline; filename="converted.pdf"'},
         )
 
     except HTTPException:
         # Re-raise HTTPExceptions
         logger.log(log_level, "completed %s error", log_type)
         raise
-    except Exception as e:
+    except Exception:
         # Catch any other exceptions
         logger.log(log_level, "completed %s error", log_type)
         logger.exception("Unexpected error in endpoint")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Register routes with configurable paths
 app.add_api_route(HEALTH_PATH, health, methods=["GET"], tags=["health"])
-app.add_api_route(CONVERTER_PATH, convert_pdf_endpoint, methods=["POST"], tags=["converter"])
+app.add_api_route(
+    CONVERTER_PATH, convert_pdf_endpoint, methods=["POST"], tags=["converter"]
+)
 
 # Mount Prometheus metrics endpoint
 metrics_app = make_asgi_app()
@@ -269,4 +245,5 @@ logger.info(f"  Metrics: {METRICS_PATH}")
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8080)

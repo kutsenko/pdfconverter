@@ -10,28 +10,28 @@ class TestMetricsDefinitions:
 
         assert REQUEST_COUNT is not None
         # Note: prometheus_client adds "_total" suffix on export, not in _name
-        assert REQUEST_COUNT._name == 'pdf_conversions'
+        assert REQUEST_COUNT._name == "pdf_conversions"
 
     def test_conversion_duration_metric_exists(self):
         """Test that CONVERSION_DURATION metric is defined."""
         from app.metrics import CONVERSION_DURATION
 
         assert CONVERSION_DURATION is not None
-        assert CONVERSION_DURATION._name == 'pdf_conversion_duration_seconds'
+        assert CONVERSION_DURATION._name == "pdf_conversion_duration_seconds"
 
     def test_input_size_metric_exists(self):
         """Test that INPUT_SIZE metric is defined."""
         from app.metrics import INPUT_SIZE
 
         assert INPUT_SIZE is not None
-        assert INPUT_SIZE._name == 'pdf_input_size_bytes'
+        assert INPUT_SIZE._name == "pdf_input_size_bytes"
 
     def test_output_size_metric_exists(self):
         """Test that OUTPUT_SIZE metric is defined."""
         from app.metrics import OUTPUT_SIZE
 
         assert OUTPUT_SIZE is not None
-        assert OUTPUT_SIZE._name == 'pdf_output_size_bytes'
+        assert OUTPUT_SIZE._name == "pdf_output_size_bytes"
 
     def test_conversion_errors_metric_exists(self):
         """Test that CONVERSION_ERRORS metric is defined."""
@@ -39,7 +39,7 @@ class TestMetricsDefinitions:
 
         assert CONVERSION_ERRORS is not None
         # Note: prometheus_client adds "_total" suffix on export, not in _name
-        assert CONVERSION_ERRORS._name == 'pdf_conversion_errors'
+        assert CONVERSION_ERRORS._name == "pdf_conversion_errors"
 
 
 class TestMetricsBuckets:
@@ -53,10 +53,10 @@ class TestMetricsBuckets:
 
         # Get buckets from the metric
         # Note: prometheus_client stores buckets in _upper_bounds
-        if hasattr(CONVERSION_DURATION, '_upper_bounds'):
+        if hasattr(CONVERSION_DURATION, "_upper_bounds"):
             actual_buckets = list(CONVERSION_DURATION._upper_bounds)
             # Remove +Inf bucket
-            actual_buckets = [b for b in actual_buckets if b != float('inf')]
+            actual_buckets = [b for b in actual_buckets if b != float("inf")]
 
             # Check that our expected buckets are present
             for bucket in expected_buckets:
@@ -69,20 +69,24 @@ class TestMetricsBuckets:
         expected_buckets = [1024, 10240, 102400, 1048576, 10485760, 52428800]
 
         # Test INPUT_SIZE
-        if hasattr(INPUT_SIZE, '_upper_bounds'):
+        if hasattr(INPUT_SIZE, "_upper_bounds"):
             actual_buckets = list(INPUT_SIZE._upper_bounds)
-            actual_buckets = [b for b in actual_buckets if b != float('inf')]
+            actual_buckets = [b for b in actual_buckets if b != float("inf")]
 
             for bucket in expected_buckets:
-                assert bucket in actual_buckets, f"INPUT_SIZE: Bucket {bucket} not found"
+                assert (
+                    bucket in actual_buckets
+                ), f"INPUT_SIZE: Bucket {bucket} not found"
 
         # Test OUTPUT_SIZE
-        if hasattr(OUTPUT_SIZE, '_upper_bounds'):
+        if hasattr(OUTPUT_SIZE, "_upper_bounds"):
             actual_buckets = list(OUTPUT_SIZE._upper_bounds)
-            actual_buckets = [b for b in actual_buckets if b != float('inf')]
+            actual_buckets = [b for b in actual_buckets if b != float("inf")]
 
             for bucket in expected_buckets:
-                assert bucket in actual_buckets, f"OUTPUT_SIZE: Bucket {bucket} not found"
+                assert (
+                    bucket in actual_buckets
+                ), f"OUTPUT_SIZE: Bucket {bucket} not found"
 
 
 class TestMetricsLabels:
@@ -94,7 +98,7 @@ class TestMetricsLabels:
 
         # Check that the metric accepts 'status' label
         try:
-            REQUEST_COUNT.labels(status='200')
+            REQUEST_COUNT.labels(status="200")
         except Exception as e:
             pytest.fail(f"REQUEST_COUNT should accept 'status' label: {e}")
 
@@ -104,7 +108,7 @@ class TestMetricsLabels:
 
         # Check that the metric accepts 'error_type' label
         try:
-            CONVERSION_ERRORS.labels(error_type='ValueError')
+            CONVERSION_ERRORS.labels(error_type="ValueError")
         except Exception as e:
             pytest.fail(f"CONVERSION_ERRORS should accept 'error_type' label: {e}")
 
@@ -114,37 +118,42 @@ class TestMetricsTypes:
 
     def test_request_count_is_counter(self):
         """Test that REQUEST_COUNT is a Counter."""
-        from app.metrics import REQUEST_COUNT
         from prometheus_client import Counter
+
+        from app.metrics import REQUEST_COUNT
 
         # Check the type through the class
         assert isinstance(REQUEST_COUNT, Counter)
 
     def test_conversion_duration_is_histogram(self):
         """Test that CONVERSION_DURATION is a Histogram."""
-        from app.metrics import CONVERSION_DURATION
         from prometheus_client import Histogram
+
+        from app.metrics import CONVERSION_DURATION
 
         assert isinstance(CONVERSION_DURATION, Histogram)
 
     def test_input_size_is_histogram(self):
         """Test that INPUT_SIZE is a Histogram."""
-        from app.metrics import INPUT_SIZE
         from prometheus_client import Histogram
+
+        from app.metrics import INPUT_SIZE
 
         assert isinstance(INPUT_SIZE, Histogram)
 
     def test_output_size_is_histogram(self):
         """Test that OUTPUT_SIZE is a Histogram."""
-        from app.metrics import OUTPUT_SIZE
         from prometheus_client import Histogram
+
+        from app.metrics import OUTPUT_SIZE
 
         assert isinstance(OUTPUT_SIZE, Histogram)
 
     def test_conversion_errors_is_counter(self):
         """Test that CONVERSION_ERRORS is a Counter."""
-        from app.metrics import CONVERSION_ERRORS
         from prometheus_client import Counter
+
+        from app.metrics import CONVERSION_ERRORS
 
         assert isinstance(CONVERSION_ERRORS, Counter)
 
@@ -157,35 +166,35 @@ class TestMetricsDocumentation:
         from app.metrics import REQUEST_COUNT
 
         assert REQUEST_COUNT._documentation
-        assert 'conversion' in REQUEST_COUNT._documentation.lower()
+        assert "conversion" in REQUEST_COUNT._documentation.lower()
 
     def test_conversion_duration_has_documentation(self):
         """Test that CONVERSION_DURATION has documentation."""
         from app.metrics import CONVERSION_DURATION
 
         assert CONVERSION_DURATION._documentation
-        assert 'duration' in CONVERSION_DURATION._documentation.lower()
+        assert "duration" in CONVERSION_DURATION._documentation.lower()
 
     def test_input_size_has_documentation(self):
         """Test that INPUT_SIZE has documentation."""
         from app.metrics import INPUT_SIZE
 
         assert INPUT_SIZE._documentation
-        assert 'input' in INPUT_SIZE._documentation.lower()
+        assert "input" in INPUT_SIZE._documentation.lower()
 
     def test_output_size_has_documentation(self):
         """Test that OUTPUT_SIZE has documentation."""
         from app.metrics import OUTPUT_SIZE
 
         assert OUTPUT_SIZE._documentation
-        assert 'output' in OUTPUT_SIZE._documentation.lower()
+        assert "output" in OUTPUT_SIZE._documentation.lower()
 
     def test_conversion_errors_has_documentation(self):
         """Test that CONVERSION_ERRORS has documentation."""
         from app.metrics import CONVERSION_ERRORS
 
         assert CONVERSION_ERRORS._documentation
-        assert 'error' in CONVERSION_ERRORS._documentation.lower()
+        assert "error" in CONVERSION_ERRORS._documentation.lower()
 
 
 class TestMetricsIntegrationWithApp:
@@ -194,26 +203,20 @@ class TestMetricsIntegrationWithApp:
     def test_metrics_are_registered(self):
         """Test that all metrics are properly registered."""
         from prometheus_client import REGISTRY
-        from app.metrics import (
-            REQUEST_COUNT,
-            CONVERSION_DURATION,
-            INPUT_SIZE,
-            OUTPUT_SIZE,
-            CONVERSION_ERRORS
-        )
 
         # Get all registered metric names
         registered_metrics = [
-            metric.name for collector in REGISTRY.collect()
+            metric.name
+            for collector in REGISTRY.collect()
             for metric in collector.samples
         ]
 
         # Check that our metrics are registered
-        assert 'pdf_conversions_total' in registered_metrics
-        assert any('pdf_conversion_duration_seconds' in m for m in registered_metrics)
-        assert any('pdf_input_size_bytes' in m for m in registered_metrics)
-        assert any('pdf_output_size_bytes' in m for m in registered_metrics)
-        assert 'pdf_conversion_errors_total' in registered_metrics
+        assert "pdf_conversions_total" in registered_metrics
+        assert any("pdf_conversion_duration_seconds" in m for m in registered_metrics)
+        assert any("pdf_input_size_bytes" in m for m in registered_metrics)
+        assert any("pdf_output_size_bytes" in m for m in registered_metrics)
+        assert "pdf_conversion_errors_total" in registered_metrics
 
     def test_metrics_can_be_incremented(self):
         """Test that metrics can be incremented without errors."""
@@ -221,7 +224,7 @@ class TestMetricsIntegrationWithApp:
 
         # This should not raise any exceptions
         try:
-            REQUEST_COUNT.labels(status='200').inc()
+            REQUEST_COUNT.labels(status="200").inc()
         except Exception as e:
             pytest.fail(f"Failed to increment REQUEST_COUNT: {e}")
 
@@ -281,39 +284,40 @@ class TestMetricsNaming:
 
     def test_counter_names_end_with_total(self):
         """Test that counter metrics follow Prometheus naming conventions."""
-        from app.metrics import REQUEST_COUNT, CONVERSION_ERRORS
         from prometheus_client import Counter
+
+        from app.metrics import CONVERSION_ERRORS, REQUEST_COUNT
 
         # Counters are properly defined (prometheus_client adds _total on export)
         assert isinstance(REQUEST_COUNT, Counter)
         assert isinstance(CONVERSION_ERRORS, Counter)
         # The base names should not have _total (added automatically on export)
-        assert not REQUEST_COUNT._name.endswith('_total')
-        assert not CONVERSION_ERRORS._name.endswith('_total')
+        assert not REQUEST_COUNT._name.endswith("_total")
+        assert not CONVERSION_ERRORS._name.endswith("_total")
 
     def test_duration_metric_ends_with_seconds(self):
         """Test that duration metric follows Prometheus naming conventions."""
         from app.metrics import CONVERSION_DURATION
 
         # Duration metrics should end with unit
-        assert CONVERSION_DURATION._name.endswith('_seconds')
+        assert CONVERSION_DURATION._name.endswith("_seconds")
 
     def test_size_metrics_end_with_bytes(self):
         """Test that size metrics follow Prometheus naming conventions."""
         from app.metrics import INPUT_SIZE, OUTPUT_SIZE
 
         # Size metrics should end with _bytes
-        assert INPUT_SIZE._name.endswith('_bytes')
-        assert OUTPUT_SIZE._name.endswith('_bytes')
+        assert INPUT_SIZE._name.endswith("_bytes")
+        assert OUTPUT_SIZE._name.endswith("_bytes")
 
     def test_metric_names_use_underscores(self):
         """Test that metric names use underscores, not hyphens."""
         from app.metrics import (
-            REQUEST_COUNT,
             CONVERSION_DURATION,
+            CONVERSION_ERRORS,
             INPUT_SIZE,
             OUTPUT_SIZE,
-            CONVERSION_ERRORS
+            REQUEST_COUNT,
         )
 
         metrics = [
@@ -321,10 +325,11 @@ class TestMetricsNaming:
             CONVERSION_DURATION,
             INPUT_SIZE,
             OUTPUT_SIZE,
-            CONVERSION_ERRORS
+            CONVERSION_ERRORS,
         ]
 
         for metric in metrics:
-            assert '-' not in metric._name, f"Metric {metric._name} contains hyphens"
-            assert '_' in metric._name or metric._name.islower(), \
-                f"Metric {metric._name} should use underscores"
+            assert "-" not in metric._name, f"Metric {metric._name} contains hyphens"
+            assert (
+                "_" in metric._name or metric._name.islower()
+            ), f"Metric {metric._name} should use underscores"

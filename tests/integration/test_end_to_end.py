@@ -3,27 +3,26 @@ End-to-end integration tests for PDF Converter Service.
 
 These tests verify complete workflows and interactions between components.
 """
-import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from app.main import HEALTH_PATH, METRICS_PATH, CONVERTER_PATH
+from app.main import CONVERTER_PATH, HEALTH_PATH, METRICS_PATH
 
 
 class TestEndToEndWorkflow:
     """Test complete end-to-end workflows."""
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_complete_conversion_workflow(self, mock_convert, client, valid_pdf):
         """Test complete PDF conversion workflow from request to response."""
         # Arrange
-        converted_pdf = b'%PDF-1.4\n%converted content'
+        converted_pdf = b"%PDF-1.4\n%converted content"
         mock_convert.return_value = converted_pdf
 
         # Act - Convert PDF
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Verify response
@@ -35,20 +34,17 @@ class TestEndToEndWorkflow:
         # Verify metrics were updated (implicitly tested via middleware)
         # Metrics would be updated in real scenario
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_health_check_workflow(self, mock_convert, client, valid_pdf):
         """Test health check workflow with X-Health-Check header."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act - Health check conversion
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={
-                "Content-Type": "application/pdf",
-                "X-Health-Check": "true"
-            }
+            headers={"Content-Type": "application/pdf", "X-Health-Check": "true"},
         )
 
         # Assert - Verify successful conversion
@@ -71,7 +67,7 @@ class TestEndToEndWorkflow:
         assert metrics_response.status_code == 200
         # Should return prometheus metrics format
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_error_handling_workflow(self, mock_convert, client, valid_pdf):
         """Test error handling workflow through complete stack."""
         # Arrange - Simulate conversion failure
@@ -81,7 +77,7 @@ class TestEndToEndWorkflow:
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Verify error response
@@ -92,19 +88,19 @@ class TestEndToEndWorkflow:
 class TestMetricsIntegration:
     """Test Prometheus metrics integration with API."""
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_metrics_updated_after_successful_conversion(
         self, mock_convert, client, valid_pdf
     ):
         """Test that metrics are updated after successful conversion."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act - Perform conversion
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Conversion succeeded
@@ -113,22 +109,19 @@ class TestMetricsIntegration:
         # Metrics should be updated (tested via middleware)
         # In real scenario, we'd query /metrics and verify counters increased
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_metrics_not_updated_for_health_checks(
         self, mock_convert, client, valid_pdf
     ):
         """Test that health check requests don't update metrics."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act - Health check conversion
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={
-                "Content-Type": "application/pdf",
-                "X-Health-Check": "true"
-            }
+            headers={"Content-Type": "application/pdf", "X-Health-Check": "true"},
         )
 
         # Assert - Conversion succeeded
@@ -150,17 +143,17 @@ class TestConfigurableEndpoints:
         metrics_response = client.get(METRICS_PATH)
         assert metrics_response.status_code == 200
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_converter_endpoint_dynamic_path(self, mock_convert, client, valid_pdf):
         """Test that converter endpoint uses dynamic path from config."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act - Use configured converter path
         response = client.post(
             CONVERTER_PATH,  # Dynamic path from environment
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert
@@ -170,23 +163,23 @@ class TestConfigurableEndpoints:
 class TestMiddlewareIntegration:
     """Test middleware integration with endpoints."""
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_middleware_processes_requests(self, mock_convert, client, valid_pdf):
         """Test that middleware processes requests correctly."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Middleware should not interfere with successful requests
         assert response.status_code == 200
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_middleware_handles_exceptions(self, mock_convert, client, valid_pdf):
         """Test that middleware handles exceptions correctly."""
         # Arrange - Simulate error
@@ -196,7 +189,7 @@ class TestMiddlewareIntegration:
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Middleware should allow error to propagate correctly
@@ -228,9 +221,7 @@ class TestInputValidation:
     def test_wrong_content_type_rejected(self, client, valid_pdf):
         """Test that wrong Content-Type is rejected."""
         response = client.post(
-            CONVERTER_PATH,
-            content=valid_pdf,
-            headers={"Content-Type": "text/plain"}
+            CONVERTER_PATH, content=valid_pdf, headers={"Content-Type": "text/plain"}
         )
 
         assert response.status_code == 415
@@ -239,28 +230,23 @@ class TestInputValidation:
     def test_empty_body_rejected_for_regular_requests(self, client):
         """Test that empty body is rejected for regular requests."""
         response = client.post(
-            CONVERTER_PATH,
-            content=b"",
-            headers={"Content-Type": "application/pdf"}
+            CONVERTER_PATH, content=b"", headers={"Content-Type": "application/pdf"}
         )
 
         assert response.status_code == 400
         assert "Empty PDF" in response.json()["detail"]
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_empty_body_handled_for_health_checks(self, mock_convert, client):
         """Test that empty body is handled for health checks."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act - Health check with empty body
         response = client.post(
             CONVERTER_PATH,
             content=b"",
-            headers={
-                "Content-Type": "application/pdf",
-                "X-Health-Check": "true"
-            }
+            headers={"Content-Type": "application/pdf", "X-Health-Check": "true"},
         )
 
         # Assert - Should use minimal PDF for health checks
@@ -270,19 +256,19 @@ class TestInputValidation:
 class TestResponseHeaders:
     """Test response headers across different scenarios."""
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_response_headers_for_successful_conversion(
         self, mock_convert, client, valid_pdf
     ):
         """Test response headers for successful conversion."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act
         response = client.post(
             CONVERTER_PATH,
             content=valid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Verify all expected headers
@@ -297,7 +283,7 @@ class TestResponseHeaders:
         response = client.post(
             CONVERTER_PATH,
             content=invalid_pdf,
-            headers={"Content-Type": "application/pdf"}
+            headers={"Content-Type": "application/pdf"},
         )
 
         # Assert - Error response should have JSON content-type
@@ -308,11 +294,11 @@ class TestResponseHeaders:
 class TestConcurrentRequests:
     """Test handling of concurrent requests."""
 
-    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_multiple_concurrent_conversions(self, mock_convert, client, valid_pdf):
         """Test that multiple concurrent conversions are handled correctly."""
         # Arrange
-        mock_convert.return_value = b'%PDF-1.4\nconverted'
+        mock_convert.return_value = b"%PDF-1.4\nconverted"
 
         # Act - Send multiple requests
         responses = []
@@ -320,7 +306,7 @@ class TestConcurrentRequests:
             response = client.post(
                 CONVERTER_PATH,
                 content=valid_pdf,
-                headers={"Content-Type": "application/pdf"}
+                headers={"Content-Type": "application/pdf"},
             )
             responses.append(response)
 

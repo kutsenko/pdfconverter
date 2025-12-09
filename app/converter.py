@@ -1,18 +1,13 @@
 import asyncio
 import logging
-import os
 import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
-async def convert_pdf_to_pdfa(
-    pdf_bytes: bytes,
-    is_health_check: bool = False
-) -> bytes:
-    """
-    Convert PDF to PDF/A format using pdfa Python module directly.
+async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -> bytes:
+    """Convert PDF to PDF/A format using pdfa Python module directly.
 
     Args:
         pdf_bytes: Input PDF as bytes
@@ -29,7 +24,7 @@ async def convert_pdf_to_pdfa(
         raise ValueError("Empty PDF file")
 
     # Validate PDF header
-    if not pdf_bytes.startswith(b'%PDF'):
+    if not pdf_bytes.startswith(b"%PDF"):
         raise ValueError("Not a valid PDF file")
 
     # Log conversion start
@@ -52,14 +47,15 @@ async def convert_pdf_to_pdfa(
 
             # Run conversion in thread pool to avoid blocking the event loop
             # The pdfa.converter.convert_to_pdfa is a synchronous function
+            # Enable OCR but skip on tagged PDFs (default behavior)
             await asyncio.to_thread(
                 pdfa_convert,
                 input_pdf=input_path,
                 output_pdf=output_path,
                 language="deu+eng",
                 pdfa_level="2",
-                ocr_enabled=True,  # Enable OCR but skip on tagged PDFs (default behavior)
-                skip_ocr_on_tagged_pdfs=True  # Skip OCR if PDF already has text
+                ocr_enabled=True,
+                skip_ocr_on_tagged_pdfs=True,
             )
 
             # Check if output file was created
@@ -72,7 +68,11 @@ async def convert_pdf_to_pdfa(
             if not output_bytes:
                 raise RuntimeError("Conversion failed: output file is empty")
 
-            logger.log(log_level, "Conversion completed, output size=%d bytes", len(output_bytes))
+            logger.log(
+                log_level,
+                "Conversion completed, output size=%d bytes",
+                len(output_bytes),
+            )
 
             return output_bytes
 
