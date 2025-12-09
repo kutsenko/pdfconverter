@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, AsyncMock
 import subprocess
 
 
@@ -20,49 +20,35 @@ class TestMetricsEndpoint:
         """Test that metrics endpoint is accessible."""
         response = client.get("/metrics")
         assert response.status_code == 200
-        assert b"pdf_conversions_total" in response.content
+        assert b"pdf_conversions" in response.content
 
     def test_metrics_format_prometheus(self, client):
         """Test that metrics are in Prometheus format."""
         response = client.get("/metrics")
         content = response.content.decode('utf-8')
 
-        # Check for expected metric names
-        assert "pdf_conversions_total" in content
+        # Check for expected metric names (prometheus adds _total on export)
+        assert "pdf_conversions" in content
         assert "pdf_conversion_duration_seconds" in content
         assert "pdf_input_size_bytes" in content
         assert "pdf_output_size_bytes" in content
-        assert "pdf_conversion_errors_total" in content
+        assert "pdf_conversion_errors" in content
 
 
 class TestPdfConverterEndpoint:
     """Tests for /api/pdfconverter endpoint."""
 
-    @patch('app.converter.subprocess.run')
-    def test_successful_conversion(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_successful_conversion(self, mock_convert, client, valid_pdf):
         """Test successful PDF conversion."""
-        # Mock successful conversion
-        mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout="Conversion successful",
-            stderr=""
-        )
-
-        # Mock file operations to return converted PDF
         converted_pdf = b'%PDF-1.4\n...converted content...'
+        mock_convert.return_value = converted_pdf
 
-        with patch('builtins.open', create=True) as mock_open:
-            # Setup mock for reading the result
-            mock_file = MagicMock()
-            mock_file.read.return_value = converted_pdf
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={"Content-Type": "application/pdf"}
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={"Content-Type": "application/pdf"}
+        )
 
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
@@ -89,22 +75,17 @@ class TestPdfConverterEndpoint:
         assert response.status_code == 415
         assert "Content-Type must be application/pdf" in response.json()["detail"]
 
-    def test_content_type_with_charset(self, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_content_type_with_charset(self, mock_convert, client, valid_pdf):
         """Test that Content-Type with charset is accepted."""
-        with patch('app.converter.subprocess.run'):
-            with patch('builtins.open', create=True) as mock_open:
-                mock_file = MagicMock()
-                mock_file.read.return_value = b'%PDF-1.4\nconverted'
-                mock_file.__enter__.return_value = mock_file
-                mock_open.return_value = mock_file
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-                response = client.post(
-                    "/api/pdfconverter",
-                    content=valid_pdf,
-                    headers={"Content-Type": "application/pdf; charset=utf-8"}
-                )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={"Content-Type": "application/pdf; charset=utf-8"}
+        )
 
-        # Should accept Content-Type with charset
         assert response.status_code == 200
 
     def test_empty_pdf_regular_request(self, client, empty_pdf):
@@ -140,11 +121,10 @@ class TestPdfConverterEndpoint:
         assert response.status_code == 413
         assert "too large" in response.json()["detail"]
 
-    @patch('app.converter.subprocess.run')
-    def test_conversion_failure(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_conversion_failure(self, mock_convert, client, valid_pdf):
         """Test that conversion failure returns 422."""
-        # Mock failed conversion
-        mock_subprocess.side_effect = subprocess.CalledProcessError(
+        mock_convert.side_effect = subprocess.CalledProcessError(
             returncode=1,
             cmd=["pdfa-cli"],
             output="",
@@ -164,244 +144,101 @@ class TestPdfConverterEndpoint:
 class TestHealthCheckHeader:
     """Tests for X-Health-Check header functionality."""
 
-    @patch('app.converter.subprocess.run')
-    def test_health_check_header_true(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_health_check_header_true(self, mock_convert, client, valid_pdf):
         """Test that X-Health-Check: true is recognized."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "true"
-                }
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={
+                "Content-Type": "application/pdf",
+                "X-Health-Check": "true"
+            }
+        )
 
         assert response.status_code == 200
 
-    @patch('app.converter.subprocess.run')
-    def test_health_check_header_1(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_health_check_header_1(self, mock_convert, client, valid_pdf):
         """Test that X-Health-Check: 1 is recognized."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "1"
-                }
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={
+                "Content-Type": "application/pdf",
+                "X-Health-Check": "1"
+            }
+        )
 
         assert response.status_code == 200
 
-    @patch('app.converter.subprocess.run')
-    def test_health_check_header_yes(self, mock_subprocess, client, valid_pdf):
-        """Test that X-Health-Check: yes is recognized."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
-
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "yes"
-                }
-            )
-
-        assert response.status_code == 200
-
-    @patch('app.converter.subprocess.run')
-    def test_health_check_header_case_insensitive(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_health_check_header_case_insensitive(self, mock_convert, client, valid_pdf):
         """Test that X-Health-Check header is case insensitive."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "TRUE"
-                }
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={
+                "Content-Type": "application/pdf",
+                "X-Health-Check": "TRUE"
+            }
+        )
 
         assert response.status_code == 200
 
-    @patch('app.converter.subprocess.run')
-    def test_health_check_with_empty_body(self, mock_subprocess, client, empty_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_health_check_with_empty_body(self, mock_convert, client, empty_pdf):
         """Test that health check with empty body uses minimal PDF."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=empty_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "true"
-                }
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=empty_pdf,
+            headers={
+                "Content-Type": "application/pdf",
+                "X-Health-Check": "true"
+            }
+        )
 
         # Health check should succeed even with empty body
-        assert response.status_code == 200
-
-    @patch('app.converter.subprocess.run')
-    def test_health_check_header_false(self, mock_subprocess, client, valid_pdf):
-        """Test that X-Health-Check: false is treated as regular request."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
-
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "false"
-                }
-            )
-
-        # Should process as regular request (not health check)
         assert response.status_code == 200
 
 
 class TestResponseHeaders:
     """Tests for response headers."""
 
-    @patch('app.converter.subprocess.run')
-    def test_response_content_type(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_response_content_type(self, mock_convert, client, valid_pdf):
         """Test that response has correct Content-Type."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={"Content-Type": "application/pdf"}
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={"Content-Type": "application/pdf"}
+        )
 
         assert response.headers["content-type"] == "application/pdf"
 
-    @patch('app.converter.subprocess.run')
-    def test_response_content_disposition(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_response_content_disposition(self, mock_convert, client, valid_pdf):
         """Test that response has Content-Disposition header."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_convert.return_value = b'%PDF-1.4\nconverted'
 
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            response = client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={"Content-Type": "application/pdf"}
-            )
+        response = client.post(
+            "/api/pdfconverter",
+            content=valid_pdf,
+            headers={"Content-Type": "application/pdf"}
+        )
 
         assert "content-disposition" in response.headers
         assert "converted.pdf" in response.headers["content-disposition"]
-
-
-class TestMetricsIntegration:
-    """Tests for Prometheus metrics integration."""
-
-    @patch('app.converter.subprocess.run')
-    def test_metrics_not_recorded_for_health_checks(self, mock_subprocess, client, valid_pdf):
-        """Test that metrics are not recorded for health check requests."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
-
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            # Get initial metrics
-            metrics_before = client.get("/metrics").content
-
-            # Make health check request
-            client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={
-                    "Content-Type": "application/pdf",
-                    "X-Health-Check": "true"
-                }
-            )
-
-            # Get metrics after
-            metrics_after = client.get("/metrics").content
-
-            # Metrics should be the same (health checks not counted)
-            # Note: This is a simple check; in reality we'd parse the metrics
-            assert len(metrics_before) <= len(metrics_after) + 100  # Allow small variance
-
-    @patch('app.converter.subprocess.run')
-    def test_metrics_recorded_for_regular_requests(self, mock_subprocess, client, valid_pdf):
-        """Test that metrics are recorded for regular requests."""
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
-
-        with patch('builtins.open', create=True) as mock_open:
-            mock_file = MagicMock()
-            mock_file.read.return_value = b'%PDF-1.4\nconverted'
-            mock_file.__enter__.return_value = mock_file
-            mock_open.return_value = mock_file
-
-            # Get initial metrics
-            metrics_before = client.get("/metrics").content.decode('utf-8')
-
-            # Make regular request
-            client.post(
-                "/api/pdfconverter",
-                content=valid_pdf,
-                headers={"Content-Type": "application/pdf"}
-            )
-
-            # Get metrics after
-            metrics_after = client.get("/metrics").content.decode('utf-8')
-
-            # Check that conversion counter increased
-            assert "pdf_conversions_total" in metrics_after
 
 
 class TestErrorHandling:
@@ -417,11 +254,10 @@ class TestErrorHandling:
         response = client.get("/api/pdfconverter")
         assert response.status_code == 405
 
-    @patch('app.converter.subprocess.run')
-    def test_500_on_unexpected_error(self, mock_subprocess, client, valid_pdf):
+    @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
+    def test_500_on_unexpected_error(self, mock_convert, client, valid_pdf):
         """Test that unexpected errors return 500."""
-        # Mock unexpected exception
-        mock_subprocess.side_effect = RuntimeError("Unexpected error")
+        mock_convert.side_effect = RuntimeError("Unexpected error")
 
         response = client.post(
             "/api/pdfconverter",

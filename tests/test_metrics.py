@@ -9,7 +9,8 @@ class TestMetricsDefinitions:
         from app.metrics import REQUEST_COUNT
 
         assert REQUEST_COUNT is not None
-        assert REQUEST_COUNT._name == 'pdf_conversions_total'
+        # Note: prometheus_client adds "_total" suffix on export, not in _name
+        assert REQUEST_COUNT._name == 'pdf_conversions'
 
     def test_conversion_duration_metric_exists(self):
         """Test that CONVERSION_DURATION metric is defined."""
@@ -37,7 +38,8 @@ class TestMetricsDefinitions:
         from app.metrics import CONVERSION_ERRORS
 
         assert CONVERSION_ERRORS is not None
-        assert CONVERSION_ERRORS._name == 'pdf_conversion_errors_total'
+        # Note: prometheus_client adds "_total" suffix on export, not in _name
+        assert CONVERSION_ERRORS._name == 'pdf_conversion_errors'
 
 
 class TestMetricsBuckets:
@@ -280,10 +282,14 @@ class TestMetricsNaming:
     def test_counter_names_end_with_total(self):
         """Test that counter metrics follow Prometheus naming conventions."""
         from app.metrics import REQUEST_COUNT, CONVERSION_ERRORS
+        from prometheus_client import Counter
 
-        # Counters should end with _total
-        assert REQUEST_COUNT._name.endswith('_total')
-        assert CONVERSION_ERRORS._name.endswith('_total')
+        # Counters are properly defined (prometheus_client adds _total on export)
+        assert isinstance(REQUEST_COUNT, Counter)
+        assert isinstance(CONVERSION_ERRORS, Counter)
+        # The base names should not have _total (added automatically on export)
+        assert not REQUEST_COUNT._name.endswith('_total')
+        assert not CONVERSION_ERRORS._name.endswith('_total')
 
     def test_duration_metric_ends_with_seconds(self):
         """Test that duration metric follows Prometheus naming conventions."""
