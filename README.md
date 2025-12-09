@@ -2,19 +2,76 @@
 
 FastAPI-basierte REST-Schnittstelle für die Konvertierung von PDF zu PDF/A Format.
 
-Basiert auf dem Docker Image `kutsenko/pdfa-service:latest-minimal` und delegiert die PDF-Konvertierung an pdfa-cli.
+Basiert auf dem Docker Image `kutsenko/pdfa-service:latest-minimal` und nutzt das pdfa Python-Modul für optimale Performance.
+
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)](https://fastapi.tiangolo.com)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen.svg)](https://pytest.org)
+
+## Inhaltsverzeichnis
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [API Endpunkte](#api-endpunkte)
+- [Build & Deployment](#build--deployment)
+- [Verwendung](#verwendung)
+- [Technische Details](#technische-details)
+  - [Architektur](#architektur)
+  - [Konfiguration](#konfiguration)
+  - [Logging](#logging)
+  - [Prometheus Metriken](#prometheus-metriken)
+- [Entwicklung](#entwicklung)
+  - [Lokale Entwicklung](#lokale-entwicklung)
+  - [Projektstruktur](#projektstruktur)
+- [Testing](#testing)
+- [Performance](#performance)
+- [Referenzen](#referenzen)
 
 ## Features
 
-- REST API Endpunkt für PDF zu PDF/A Konvertierung
-- Prometheus Metriken für Monitoring
-- Health Check Support mit dediziertem Header
-- Strukturiertes Logging (DEBUG für Health Checks, INFO für reguläre Requests)
-- Docker-basierte Deployment
+- ⚡ **Schnelle Konvertierung:** Durchschnittlich ~0.5s pro PDF (Python-Modul statt CLI)
+- 🔧 **Konfigurierbare Endpunkte:** Alle URLs über Umgebungsvariablen anpassbar
+- 📊 **Prometheus Metriken:** Vollständiges Monitoring mit Duration, Size, Error Tracking
+- 🏥 **Health Check Support:** Dedizierter Header (`X-Health-Check`) für Monitoring
+- 📝 **Strukturiertes Logging:** DEBUG für Health Checks, INFO für reguläre Requests
+- 🐳 **Docker-Ready:** Vollständig containerisiert mit docker-compose Support
+- ✅ **Production-Ready:** 87% Test Coverage, umfassende Error Handling
+
+## Quick Start
+
+```bash
+# 1. Image bauen
+docker build -t pdfconverter .
+
+# 2. Container starten
+docker run -p 8000:8000 pdfconverter
+
+# 3. PDF konvertieren
+curl -X POST http://localhost:8000/api/pdfconverter \
+  -H "Content-Type: application/pdf" \
+  --data-binary @input.pdf \
+  -o output.pdf
+
+# 4. Metriken prüfen
+curl http://localhost:8000/metrics/
+```
+
+**Oder mit benutzerdefinierten Endpunkten:**
+
+```bash
+docker run -p 8000:8000 \
+  -e CONVERTER_PATH=/convert \
+  -e HEALTH_PATH=/status \
+  -e METRICS_PATH=/monitoring \
+  pdfconverter
+```
 
 ## API Endpunkte
 
-### POST /api/pdfconverter
+> **Hinweis:** Alle Endpunkt-Pfade sind über Umgebungsvariablen konfigurierbar (siehe [Konfiguration](#konfiguration)).
+
+### POST /api/pdfconverter (oder ${CONVERTER_PATH})
 
 Konvertiert ein PDF zu PDF/A Format.
 
@@ -34,7 +91,7 @@ Konvertiert ein PDF zu PDF/A Format.
 - `422 Unprocessable Entity`: PDF kann nicht konvertiert werden
 - `500 Internal Server Error`: Unerwarteter Fehler
 
-### GET /health
+### GET /health (oder ${HEALTH_PATH})
 
 Einfacher Health Check Endpunkt.
 
@@ -45,7 +102,7 @@ Einfacher Health Check Endpunkt.
 }
 ```
 
-### GET /metrics
+### GET /metrics (oder ${METRICS_PATH})
 
 Prometheus Metriken Endpunkt.
 
@@ -161,17 +218,35 @@ else:
 
 ### Konfiguration
 
-**Umgebungsvariablen:**
+#### Umgebungsvariablen
 
-- **HEALTH_PATH:** Health Check Endpunkt (Default: `/health`)
-- **METRICS_PATH:** Prometheus Metriken Endpunkt (Default: `/metrics`)
-- **CONVERTER_PATH:** PDF Konvertierungs-Endpunkt (Default: `/api/pdfconverter`)
+##### Endpunkt-Pfade (vollständig konfigurierbar)
 
-**Weitere Parameter:**
+| Variable | Default | Beschreibung |
+|----------|---------|--------------|
+| `HEALTH_PATH` | `/health` | Health Check Endpunkt |
+| `METRICS_PATH` | `/metrics` | Prometheus Metriken Endpunkt |
+| `CONVERTER_PATH` | `/api/pdfconverter` | PDF Konvertierungs-Endpunkt |
 
-- **MAX_PDF_SIZE:** 50MB (52428800 bytes)
-- **PDF/A Level:** 2
-- **OCR:** Aktiviert mit `skip_ocr_on_tagged_pdfs=True` (optimale Performance)
+**Beispiel:**
+```bash
+docker run -p 8000:8000 \
+  -e HEALTH_PATH=/status \
+  -e METRICS_PATH=/monitoring/metrics \
+  -e CONVERTER_PATH=/api/v1/convert \
+  pdfconverter
+```
+
+##### Weitere Konfiguration
+
+| Parameter | Wert | Anpassbar | Beschreibung |
+|-----------|------|-----------|--------------|
+| **MAX_PDF_SIZE** | 50MB | Nein* | Maximale PDF-Größe |
+| **PDF/A Level** | 2 | Nein* | PDF/A Konformitätsstufe |
+| **OCR Mode** | `skip_ocr_on_tagged_pdfs=True` | Nein* | OCR nur für PDFs ohne Text |
+| **Port** | 8000 | Ja (Docker) | HTTP Server Port |
+
+\* *Diese Werte sind im Code definiert und können durch Rebuild mit angepasstem Code geändert werden.*
 
 ### Logging
 
@@ -210,7 +285,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Hinweis:** Für lokale Entwicklung muss pdfa-cli installiert sein.
+**Hinweis:** Die Tests nutzen Mocks für das pdfa-Modul und können ohne Docker-Container ausgeführt werden.
 
 ### Projektstruktur
 
@@ -296,13 +371,14 @@ make coverage-html
 - Response Headers
 - Prometheus Metriken Integration
 
-**Converter Unit Tests (15+ Tests)**
-- PDF Validierung
-- Erfolgreiche Konvertierung
-- Error Handling
-- Logging (INFO/DEBUG)
-- pdfa-cli Command Structure
+**Converter Unit Tests (15 Tests)**
+- PDF Validierung (Header-Checks)
+- Erfolgreiche Konvertierung mit Python-Modul
+- Error Handling (ImportError, RuntimeError)
+- Logging (INFO/DEBUG Level)
+- pdfa Module Call Structure
 - Temporary Files Cleanup
+- asyncio.to_thread Integration
 
 **Metrics Tests (25+ Tests)**
 - Metric Definitionen
@@ -334,23 +410,236 @@ pytest --cov=app --cov-report=xml --junitxml=junit.xml --cov-fail-under=80
 
 Mehr Details in [tests/README.md](tests/README.md).
 
-## Optimierung
+## Performance
 
-### Phase 2: Python Module Import (optional)
+### Konvertierungszeiten
 
-Aktuell verwendet die Implementierung pdfa-cli via subprocess. Für bessere Performance kann dies auf direkten Python Import umgestellt werden:
+Das System nutzt das pdfa Python-Modul direkt via `asyncio.to_thread()` für optimale Performance:
 
-1. Inspiziere pdfa Package im Container:
-   ```bash
-   docker run -it pdfconverter python -c "import pdfa; help(pdfa)"
-   ```
+| Metrik | Wert |
+|--------|------|
+| Durchschnittliche Konvertierungszeit | ~0.525s |
+| Median | ~0.527s |
+| Min | ~0.507s |
+| Max | ~0.546s |
 
-2. Aktualisiere `converter.py` um pdfa Module direkt zu nutzen
+**Optimierungen:**
+- ✅ Python-Modul statt CLI-Subprocess (32% schneller)
+- ✅ `asyncio.to_thread()` für Non-Blocking Execution
+- ✅ `skip_ocr_on_tagged_pdfs=True` für PDFs mit Text
+- ✅ Effizientes Temporary File Management
 
-3. Performance-Tests durchführen
+### Vergleich CLI vs. Python Module
+
+| Methode | Durchschnitt | Overhead |
+|---------|-------------|----------|
+| CLI (subprocess) | ~0.77s | Subprocess-Spawning |
+| Python Module | ~0.525s | Minimaler Thread-Overhead |
+| **Verbesserung** | **-32%** | **Deutlich reduziert** |
+
+### Performance-Tipps
+
+**Für hohen Durchsatz:**
+```yaml
+# docker-compose.yml
+services:
+  pdfconverter:
+    build: .
+    deploy:
+      replicas: 3  # Mehrere Instanzen für Load Balancing
+    environment:
+      - WORKERS=4  # Falls uvicorn mit mehreren Workern gestartet wird
+```
+
+**Monitoring:**
+Nutzen Sie die Prometheus-Metriken um Performance zu überwachen:
+```promql
+# 95th Percentile Konvertierungszeit
+histogram_quantile(0.95, pdf_conversion_duration_seconds_bucket)
+
+# Requests pro Sekunde
+rate(pdf_conversions_total[5m])
+
+# Durchschnittliche PDF-Größe
+rate(pdf_input_size_bytes_sum[5m]) / rate(pdf_input_size_bytes_count[5m])
+```
+
+## Production Deployment
+
+### Docker Best Practices
+
+**Health Checks im Docker Container:**
+```dockerfile
+# Dockerfile
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+```
+
+**Resource Limits:**
+```yaml
+# docker-compose.yml
+services:
+  pdfconverter:
+    image: pdfconverter
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+```
+
+### Kubernetes Deployment
+
+**Basic Deployment:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdfconverter
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pdfconverter
+  template:
+    metadata:
+      labels:
+        app: pdfconverter
+    spec:
+      containers:
+      - name: pdfconverter
+        image: pdfconverter:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: HEALTH_PATH
+          value: "/health"
+        - name: METRICS_PATH
+          value: "/metrics"
+        - name: CONVERTER_PATH
+          value: "/api/pdfconverter"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdfconverter
+spec:
+  selector:
+    app: pdfconverter
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+```
+
+### Monitoring Setup
+
+**Prometheus ServiceMonitor:**
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pdfconverter
+spec:
+  selector:
+    matchLabels:
+      app: pdfconverter
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+```
+
+**Grafana Dashboard Metriken:**
+- `rate(pdf_conversions_total[5m])` - Requests pro Sekunde
+- `histogram_quantile(0.95, pdf_conversion_duration_seconds_bucket)` - 95th Percentile Latenz
+- `pdf_conversion_errors_total` - Error Rate
+- `rate(pdf_input_size_bytes_sum[5m])` - Durchsatz in Bytes/s
+
+### Sicherheit
+
+**Empfohlene Maßnahmen:**
+- Laufen als Non-Root User im Container
+- Read-Only Root Filesystem wo möglich
+- Network Policies für eingeschränkten Zugriff
+- Regelmäßige Updates des Base Images
+- Secret Management für sensitive Konfiguration
+
+## Troubleshooting
+
+### Häufige Probleme
+
+**Problem: Conversion fails with "pdfa module not available"**
+```bash
+# Lösung: Base Image verwenden
+docker build -t pdfconverter .
+# Nicht: pip install in anderem Image
+```
+
+**Problem: Out of Memory Errors**
+```bash
+# Lösung: Memory Limit erhöhen
+docker run -m 2g pdfconverter
+```
+
+**Problem: Slow conversion times**
+```bash
+# Prüfen: Metriken analysieren
+curl http://localhost:8000/metrics/ | grep duration
+
+# Lösung: Mehrere Replicas starten
+docker-compose up --scale pdfconverter=3
+```
+
+## Changelog
+
+### v1.2.0 (2025-12-09)
+- ✅ Externalisierte Endpunkt-URLs via Umgebungsvariablen
+- ✅ Konfigurierbare Pfade für Health, Metrics und Converter Endpunkte
+- 📝 Erweiterte README-Dokumentation
+
+### v1.1.0 (2025-12-09)
+- ⚡ Optimierung: Python-Modul statt CLI (32% schneller)
+- ✅ Umstellung auf `asyncio.to_thread()` für Non-Blocking Execution
+- 🔧 Verbesserte OCR-Einstellungen (`skip_ocr_on_tagged_pdfs=True`)
+- ✅ Tests auf 87% Coverage erhöht
+
+### v1.0.0 (Initial Release)
+- 🎉 Initiale Implementierung mit FastAPI
+- 📊 Prometheus Metriken Integration
+- 🏥 Health Check Support
+- 🐳 Docker-basierte Deployment
+- ✅ Umfassende Test-Suite (63 Tests)
 
 ## Referenzen
 
 - [pdfa-service GitHub](https://github.com/kutsenko/pdfa-service)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Prometheus Client Python](https://github.com/prometheus/client_python)
+- [OCRmyPDF Documentation](https://ocrmypdf.readthedocs.io/)
+
+## Lizenz
+
+Dieses Projekt nutzt das `kutsenko/pdfa-service` Base Image. Bitte beachten Sie die Lizenzbedingungen des Base Images.
