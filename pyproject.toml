@@ -192,4 +192,9 @@ ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "test_*.py", ".venv", "venv"]
-skips = ["B101", "B601"]
+skips = [
+    "B101",  # assert_used - we use asserts in tests
+    "B104",  # hardcoded_bind_all_interfaces - necessary for containers
+    "B404",  # import_subprocess - needed for CalledProcessError handling
+    "B601",  # paramiko_calls
+]
