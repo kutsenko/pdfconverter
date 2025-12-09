@@ -48,13 +48,13 @@ async def convert_pdf_to_pdfa(
                 f.write(pdf_bytes)
 
             # Call pdfa-cli
-            # Note: We disable OCR for faster conversion, especially for health checks
+            # Note: Using default settings for maximum compatibility
+            # The tool will automatically detect if text exists and handle appropriately
             cmd = [
                 "pdfa-cli",
                 input_path,
                 output_path,
-                "--pdfa-level", "2",
-                "--ocr-enabled", "false"
+                "--pdfa-level", "2"
             ]
 
             logger.log(log_level, "Executing pdfa-cli command")
