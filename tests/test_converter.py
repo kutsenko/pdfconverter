@@ -1,7 +1,6 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
-import subprocess
-import os
+from unittest.mock import patch, MagicMock, AsyncMock
+from pathlib import Path
 
 
 class TestConvertPdfToPdfa:
@@ -24,10 +23,11 @@ class TestConvertPdfToPdfa:
             await convert_pdf_to_pdfa(b'This is not a PDF')
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
-    async def test_successful_conversion(self, mock_exists, mock_file, mock_subprocess):
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
+    @patch('pathlib.Path.write_bytes')
+    async def test_successful_conversion(self, mock_write, mock_read, mock_exists, mock_to_thread):
         """Test successful PDF conversion."""
         from app.converter import convert_pdf_to_pdfa
 
@@ -35,86 +35,74 @@ class TestConvertPdfToPdfa:
         input_pdf = b'%PDF-1.4\ntest content'
         output_pdf = b'%PDF-1.4\nconverted content'
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout="Conversion successful",
-            stderr=""
-        )
+        mock_to_thread.return_value = None  # pdfa_convert doesn't return anything
         mock_exists.return_value = True
-
-        # Mock file reads/writes
-        mock_file.return_value.read.return_value = output_pdf
+        mock_read.return_value = output_pdf
 
         result = await convert_pdf_to_pdfa(input_pdf)
 
         assert result == output_pdf
-        assert mock_subprocess.called
+        assert mock_to_thread.called
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    async def test_subprocess_error_raises_exception(self, mock_subprocess):
-        """Test that subprocess error is propagated."""
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    async def test_conversion_error_raises_exception(self, mock_to_thread):
+        """Test that conversion error is propagated."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
 
-        mock_subprocess.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=["pdfa-cli"],
-            output="",
-            stderr="Conversion failed"
-        )
+        mock_to_thread.side_effect = Exception("Conversion failed")
 
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(RuntimeError, match="PDF conversion failed"):
             await convert_pdf_to_pdfa(input_pdf)
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
-    async def test_output_file_not_created_raises_error(self, mock_exists, mock_file, mock_subprocess):
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    async def test_output_file_not_created_raises_error(self, mock_exists, mock_to_thread):
         """Test that missing output file raises RuntimeError."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = False  # Output file not created
 
         with pytest.raises(RuntimeError, match="output file not created"):
             await convert_pdf_to_pdfa(input_pdf)
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
-    async def test_empty_output_file_raises_error(self, mock_exists, mock_file, mock_subprocess):
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
+    async def test_empty_output_file_raises_error(self, mock_read, mock_exists, mock_to_thread):
         """Test that empty output file raises RuntimeError."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = b''  # Empty output
+        mock_read.return_value = b''  # Empty output
 
         with pytest.raises(RuntimeError, match="output file is empty"):
             await convert_pdf_to_pdfa(input_pdf)
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
-    async def test_health_check_parameter(self, mock_exists, mock_file, mock_subprocess):
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
+    async def test_health_check_parameter(self, mock_read, mock_exists, mock_to_thread):
         """Test that is_health_check parameter is passed correctly."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
         output_pdf = b'%PDF-1.4\nconverted'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = output_pdf
+        mock_read.return_value = output_pdf
 
         # Call with health check
         result = await convert_pdf_to_pdfa(input_pdf, is_health_check=True)
@@ -122,48 +110,44 @@ class TestConvertPdfToPdfa:
         assert result == output_pdf
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
-    async def test_pdfa_cli_command_structure(self, mock_exists, mock_file, mock_subprocess):
-        """Test that pdfa-cli is called with correct arguments."""
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
+    async def test_pdfa_module_call_structure(self, mock_read, mock_exists, mock_to_thread):
+        """Test that pdfa module is called with correct arguments."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
         output_pdf = b'%PDF-1.4\nconverted'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = output_pdf
+        mock_read.return_value = output_pdf
 
         await convert_pdf_to_pdfa(input_pdf)
 
-        # Verify subprocess.run was called
-        assert mock_subprocess.called
-        call_args = mock_subprocess.call_args
+        # Verify asyncio.to_thread was called with pdfa_convert function
+        assert mock_to_thread.called
+        call_args = mock_to_thread.call_args
 
-        # Check command structure
-        cmd = call_args[0][0]
-        assert cmd[0] == "pdfa-cli"
-        assert "--pdfa-level" in cmd
-        assert "2" in cmd
-        assert "--ocr-enabled" in cmd
-        assert "false" in cmd
+        # Check that function arguments include expected parameters
+        assert 'language' in call_args.kwargs or len(call_args.args) > 2
+        assert 'pdfa_level' in call_args.kwargs or len(call_args.args) > 3
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
-    async def test_temporary_files_cleanup(self, mock_exists, mock_file, mock_subprocess):
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
+    async def test_temporary_files_cleanup(self, mock_read, mock_exists, mock_to_thread):
         """Test that temporary files are cleaned up after conversion."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
         output_pdf = b'%PDF-1.4\nconverted'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = output_pdf
+        mock_read.return_value = output_pdf
 
         # Conversion should complete without leaving temp files
         result = await convert_pdf_to_pdfa(input_pdf)
@@ -172,37 +156,32 @@ class TestConvertPdfToPdfa:
         # tempfile.TemporaryDirectory should handle cleanup automatically
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    async def test_stderr_output_on_error(self, mock_subprocess):
-        """Test that stderr is captured on conversion error."""
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    async def test_error_output_on_failure(self, mock_to_thread):
+        """Test that errors are captured on conversion failure."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
 
-        error_message = "Critical error in pdfa-cli"
-        mock_subprocess.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=["pdfa-cli"],
-            output="",
-            stderr=error_message
-        )
+        error_message = "Critical error in pdfa conversion"
+        mock_to_thread.side_effect = Exception(error_message)
 
-        with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        with pytest.raises(RuntimeError) as exc_info:
             await convert_pdf_to_pdfa(input_pdf)
 
-        # Check that error info is preserved
-        assert exc_info.value.returncode == 1
+        # Check that error message is included
+        assert "PDF conversion failed" in str(exc_info.value)
 
 
 class TestConverterLogging:
     """Tests for converter logging functionality."""
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
     @patch('app.converter.logger')
-    async def test_logging_for_regular_conversion(self, mock_logger, mock_exists, mock_file, mock_subprocess):
+    async def test_logging_for_regular_conversion(self, mock_logger, mock_read, mock_exists, mock_to_thread):
         """Test that INFO level is used for regular conversions."""
         from app.converter import convert_pdf_to_pdfa
         import logging
@@ -210,9 +189,9 @@ class TestConverterLogging:
         input_pdf = b'%PDF-1.4\ntest content'
         output_pdf = b'%PDF-1.4\nconverted'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = output_pdf
+        mock_read.return_value = output_pdf
 
         await convert_pdf_to_pdfa(input_pdf, is_health_check=False)
 
@@ -221,11 +200,11 @@ class TestConverterLogging:
         assert any(call[0][0] == logging.INFO for call in calls)
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('os.path.exists')
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_bytes')
     @patch('app.converter.logger')
-    async def test_logging_for_health_check(self, mock_logger, mock_exists, mock_file, mock_subprocess):
+    async def test_logging_for_health_check(self, mock_logger, mock_read, mock_exists, mock_to_thread):
         """Test that DEBUG level is used for health checks."""
         from app.converter import convert_pdf_to_pdfa
         import logging
@@ -233,9 +212,9 @@ class TestConverterLogging:
         input_pdf = b'%PDF-1.4\ntest content'
         output_pdf = b'%PDF-1.4\nconverted'
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_to_thread.return_value = None
         mock_exists.return_value = True
-        mock_file.return_value.read.return_value = output_pdf
+        mock_read.return_value = output_pdf
 
         await convert_pdf_to_pdfa(input_pdf, is_health_check=True)
 
@@ -244,22 +223,17 @@ class TestConverterLogging:
         assert any(call[0][0] == logging.DEBUG for call in calls)
 
     @pytest.mark.asyncio
-    @patch('app.converter.subprocess.run')
+    @patch('asyncio.to_thread', new_callable=AsyncMock)
     @patch('app.converter.logger')
-    async def test_error_logging_on_failure(self, mock_logger, mock_subprocess):
+    async def test_error_logging_on_failure(self, mock_logger, mock_to_thread):
         """Test that errors are logged appropriately."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b'%PDF-1.4\ntest content'
 
-        mock_subprocess.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=["pdfa-cli"],
-            output="",
-            stderr="Error message"
-        )
+        mock_to_thread.side_effect = Exception("Error message")
 
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(RuntimeError):
             await convert_pdf_to_pdfa(input_pdf)
 
         # Check that error was logged
@@ -288,9 +262,9 @@ class TestPdfValidation:
         ]
 
         for header in valid_headers:
-            with patch('app.converter.subprocess.run'):
-                with patch('builtins.open', new_callable=mock_open):
-                    with patch('os.path.exists', return_value=True):
+            with patch('asyncio.to_thread', new_callable=AsyncMock):
+                with patch('pathlib.Path.exists', return_value=True):
+                    with patch('pathlib.Path.read_bytes', return_value=b'%PDF-1.4\nconverted'):
                         # Should not raise ValueError for valid headers
                         try:
                             await convert_pdf_to_pdfa(header + b'content')

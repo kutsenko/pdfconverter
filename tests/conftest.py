@@ -1,5 +1,29 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import Mock
+import sys
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_pdfa_module():
+    """Mock the pdfa module for all tests."""
+    # Create mock pdfa module
+    mock_pdfa = Mock()
+    mock_converter = Mock()
+    mock_convert_func = Mock()
+
+    mock_converter.convert_to_pdfa = mock_convert_func
+    mock_pdfa.converter = mock_converter
+
+    # Add to sys.modules
+    sys.modules['pdfa'] = mock_pdfa
+    sys.modules['pdfa.converter'] = mock_converter
+
+    yield mock_convert_func
+
+    # Cleanup
+    sys.modules.pop('pdfa', None)
+    sys.modules.pop('pdfa.converter', None)
 
 
 @pytest.fixture

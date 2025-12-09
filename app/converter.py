@@ -1,8 +1,8 @@
+import asyncio
 import logging
 import os
-import subprocess
 import tempfile
-from typing import Optional
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ async def convert_pdf_to_pdfa(
     is_health_check: bool = False
 ) -> bytes:
     """
-    Convert PDF to PDF/A format using pdfa-cli.
+    Convert PDF to PDF/A format using pdfa Python module directly.
 
     Args:
         pdf_bytes: Input PDF as bytes
@@ -23,8 +23,7 @@ async def convert_pdf_to_pdfa(
 
     Raises:
         ValueError: If PDF is invalid or empty
-        subprocess.CalledProcessError: If conversion fails
-        RuntimeError: If conversion fails for other reasons
+        RuntimeError: If conversion fails
     """
     if not pdf_bytes:
         raise ValueError("Empty PDF file")
@@ -38,45 +37,37 @@ async def convert_pdf_to_pdfa(
     logger.log(log_level, "Starting PDF conversion, size=%d bytes", len(pdf_bytes))
 
     try:
+        # Import pdfa module (done inside function to handle import errors gracefully)
+        from pdfa.converter import convert_to_pdfa as pdfa_convert
+
         # Create temporary directory for conversion
         with tempfile.TemporaryDirectory() as tmpdir:
-            input_path = os.path.join(tmpdir, "input.pdf")
-            output_path = os.path.join(tmpdir, "output.pdf")
+            input_path = Path(tmpdir) / "input.pdf"
+            output_path = Path(tmpdir) / "output.pdf"
 
             # Write input PDF
-            with open(input_path, 'wb') as f:
-                f.write(pdf_bytes)
+            input_path.write_bytes(pdf_bytes)
 
-            # Call pdfa-cli
-            # Note: Using default settings for maximum compatibility
-            # The tool will automatically detect if text exists and handle appropriately
-            cmd = [
-                "pdfa-cli",
-                input_path,
-                output_path,
-                "--pdfa-level", "2"
-            ]
+            logger.log(log_level, "Executing pdfa conversion via Python module")
 
-            logger.log(log_level, "Executing pdfa-cli command")
-
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True
+            # Run conversion in thread pool to avoid blocking the event loop
+            # The pdfa.converter.convert_to_pdfa is a synchronous function
+            await asyncio.to_thread(
+                pdfa_convert,
+                input_pdf=input_path,
+                output_pdf=output_path,
+                language="deu+eng",
+                pdfa_level="2",
+                ocr_enabled=True,  # Enable OCR but skip on tagged PDFs (default behavior)
+                skip_ocr_on_tagged_pdfs=True  # Skip OCR if PDF already has text
             )
 
-            # Log subprocess output at DEBUG level
-            if result.stdout:
-                logger.debug("pdfa-cli stdout: %s", result.stdout)
-
             # Check if output file was created
-            if not os.path.exists(output_path):
+            if not output_path.exists():
                 raise RuntimeError("Conversion failed: output file not created")
 
             # Read output PDF
-            with open(output_path, 'rb') as f:
-                output_bytes = f.read()
+            output_bytes = output_path.read_bytes()
 
             if not output_bytes:
                 raise RuntimeError("Conversion failed: output file is empty")
@@ -85,17 +76,9 @@ async def convert_pdf_to_pdfa(
 
             return output_bytes
 
-    except subprocess.CalledProcessError as e:
-        error_msg = f"pdfa-cli failed with exit code {e.returncode}"
-        if e.stderr:
-            error_msg += f": {e.stderr}"
-        logger.error(error_msg)
-        raise subprocess.CalledProcessError(
-            e.returncode,
-            e.cmd,
-            e.output,
-            e.stderr
-        )
+    except ImportError as e:
+        logger.error("Failed to import pdfa module: %s", e)
+        raise RuntimeError(f"pdfa module not available: {e}")
     except Exception as e:
-        logger.error("Unexpected error during conversion: %s", e, exc_info=True)
-        raise
+        logger.error("Conversion failed: %s", e, exc_info=True)
+        raise RuntimeError(f"PDF conversion failed: {str(e)}")
