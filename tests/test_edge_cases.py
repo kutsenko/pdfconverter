@@ -3,6 +3,7 @@ Edge case tests for PDF Converter Service.
 
 These tests cover uncommon scenarios and boundary conditions to improve coverage.
 """
+
 import subprocess
 from unittest.mock import AsyncMock, patch
 
@@ -204,7 +205,7 @@ class TestErrorResponseFormats:
         """Test that 415 errors include detail field."""
         response = client.post(
             CONVERTER_PATH,
-            content=valid_pdf
+            content=valid_pdf,
             # Missing Content-Type
         )
 

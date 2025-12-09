@@ -3,6 +3,7 @@ End-to-end integration tests for PDF Converter Service.
 
 These tests verify complete workflows and interactions between components.
 """
+
 from unittest.mock import AsyncMock, patch
 
 from app.main import CONVERTER_PATH, HEALTH_PATH, METRICS_PATH
@@ -211,7 +212,7 @@ class TestInputValidation:
         """Test that missing Content-Type is rejected."""
         response = client.post(
             CONVERTER_PATH,
-            content=valid_pdf
+            content=valid_pdf,
             # No Content-Type header
         )
 
