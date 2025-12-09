@@ -56,11 +56,18 @@ def is_health_check(request: Request) -> bool:
 
 
 @app.middleware("http")
-async def metrics_middleware(request: Request, call_next):
+async def metrics_middleware(request: Request, call_next) -> Response:
     """
     Middleware to collect Prometheus metrics.
 
     Only records metrics for non-health-check requests.
+
+    Args:
+        request: FastAPI Request object
+        call_next: Next middleware or endpoint handler
+
+    Returns:
+        Response from the endpoint
     """
     # Check if this is a health check
     is_hc = is_health_check(request)
@@ -111,17 +118,17 @@ async def metrics_middleware(request: Request, call_next):
         return response
 
 
-async def health():
+async def health() -> dict[str, str]:
     """
     Basic health check endpoint.
 
     Returns:
-        Simple status message
+        Simple status message with 'status' key
     """
     return {"status": "healthy"}
 
 
-async def convert_pdf_endpoint(request: Request):
+async def convert_pdf_endpoint(request: Request) -> Response:
     """
     Convert PDF to PDF/A format.
 
