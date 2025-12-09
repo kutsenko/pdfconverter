@@ -1,4 +1,5 @@
 import logging
+import os
 import subprocess
 import time
 from typing import Optional
@@ -26,6 +27,11 @@ logger = logging.getLogger(__name__)
 # Constants
 MAX_PDF_SIZE = 50 * 1024 * 1024  # 50MB
 MINIMAL_PDF = b'%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj xref\n0 3\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\ntrailer<</Size 3/Root 1 0 R>>startxref\n110\n%%EOF'
+
+# Configurable endpoint paths via environment variables
+HEALTH_PATH = os.getenv("HEALTH_PATH", "/health")
+METRICS_PATH = os.getenv("METRICS_PATH", "/metrics")
+CONVERTER_PATH = os.getenv("CONVERTER_PATH", "/api/pdfconverter")
 
 # Create FastAPI app
 app = FastAPI(
@@ -60,7 +66,7 @@ async def metrics_middleware(request: Request, call_next):
     is_hc = is_health_check(request)
 
     # Only track metrics for conversion endpoint
-    if request.url.path == "/api/pdfconverter":
+    if request.url.path == CONVERTER_PATH:
         start_time = time.time()
 
         # Store request size for metrics
@@ -105,7 +111,6 @@ async def metrics_middleware(request: Request, call_next):
         return response
 
 
-@app.get("/health")
 async def health():
     """
     Basic health check endpoint.
@@ -116,7 +121,6 @@ async def health():
     return {"status": "healthy"}
 
 
-@app.post("/api/pdfconverter")
 async def convert_pdf_endpoint(request: Request):
     """
     Convert PDF to PDF/A format.
@@ -241,9 +245,19 @@ async def convert_pdf_endpoint(request: Request):
         )
 
 
+# Register routes with configurable paths
+app.add_api_route(HEALTH_PATH, health, methods=["GET"], tags=["health"])
+app.add_api_route(CONVERTER_PATH, convert_pdf_endpoint, methods=["POST"], tags=["converter"])
+
 # Mount Prometheus metrics endpoint
 metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
+app.mount(METRICS_PATH, metrics_app)
+
+# Log configured paths
+logger.info("Configured endpoints:")
+logger.info(f"  Health Check: {HEALTH_PATH}")
+logger.info(f"  PDF Converter: {CONVERTER_PATH}")
+logger.info(f"  Metrics: {METRICS_PATH}")
 
 
 if __name__ == "__main__":

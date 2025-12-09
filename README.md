@@ -72,6 +72,16 @@ docker build -t pdfconverter .
 docker run -p 8000:8000 pdfconverter
 ```
 
+**Mit benutzerdefinierten Endpunkt-URLs:**
+
+```bash
+docker run -p 8000:8000 \
+  -e HEALTH_PATH=/status \
+  -e METRICS_PATH=/monitoring/metrics \
+  -e CONVERTER_PATH=/convert \
+  pdfconverter
+```
+
 ### Mit docker-compose
 
 ```yaml
@@ -83,6 +93,10 @@ services:
       - "8000:8000"
     environment:
       - LOG_LEVEL=INFO
+      # Optional: Customize endpoint paths
+      - HEALTH_PATH=/health
+      - METRICS_PATH=/metrics
+      - CONVERTER_PATH=/api/pdfconverter
 ```
 
 ## Verwendung
@@ -141,15 +155,23 @@ else:
 
 - **Framework:** FastAPI 0.109.0
 - **Base Image:** kutsenko/pdfa-service:latest-minimal
-- **Conversion Tool:** pdfa-cli (via subprocess)
+- **Conversion:** pdfa Python module (via asyncio.to_thread)
 - **Metriken:** prometheus-client
 - **Port:** 8000
 
 ### Konfiguration
 
+**Umgebungsvariablen:**
+
+- **HEALTH_PATH:** Health Check Endpunkt (Default: `/health`)
+- **METRICS_PATH:** Prometheus Metriken Endpunkt (Default: `/metrics`)
+- **CONVERTER_PATH:** PDF Konvertierungs-Endpunkt (Default: `/api/pdfconverter`)
+
+**Weitere Parameter:**
+
 - **MAX_PDF_SIZE:** 50MB (52428800 bytes)
 - **PDF/A Level:** 2
-- **OCR:** Deaktiviert (für bessere Performance)
+- **OCR:** Aktiviert mit `skip_ocr_on_tagged_pdfs=True` (optimale Performance)
 
 ### Logging
 

@@ -2,13 +2,15 @@ import pytest
 from unittest.mock import patch, AsyncMock
 import subprocess
 
+from app.main import HEALTH_PATH, METRICS_PATH, CONVERTER_PATH
+
 
 class TestHealthEndpoint:
     """Tests for /health endpoint."""
 
     def test_health_check_returns_200(self, client):
         """Test that health endpoint returns 200 with correct payload."""
-        response = client.get("/health")
+        response = client.get(HEALTH_PATH)
         assert response.status_code == 200
         assert response.json() == {"status": "healthy"}
 
@@ -18,13 +20,13 @@ class TestMetricsEndpoint:
 
     def test_metrics_endpoint_accessible(self, client):
         """Test that metrics endpoint is accessible."""
-        response = client.get("/metrics")
+        response = client.get(METRICS_PATH)
         assert response.status_code == 200
         assert b"pdf_conversions" in response.content
 
     def test_metrics_format_prometheus(self, client):
         """Test that metrics are in Prometheus format."""
-        response = client.get("/metrics")
+        response = client.get(METRICS_PATH)
         content = response.content.decode('utf-8')
 
         # Check for expected metric names (prometheus adds _total on export)
@@ -45,7 +47,7 @@ class TestPdfConverterEndpoint:
         mock_convert.return_value = converted_pdf
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -57,7 +59,7 @@ class TestPdfConverterEndpoint:
     def test_content_type_validation_missing(self, client, valid_pdf):
         """Test that missing Content-Type header returns 415."""
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf
         )
 
@@ -67,7 +69,7 @@ class TestPdfConverterEndpoint:
     def test_content_type_validation_wrong(self, client, valid_pdf):
         """Test that wrong Content-Type header returns 415."""
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "text/plain"}
         )
@@ -81,7 +83,7 @@ class TestPdfConverterEndpoint:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "application/pdf; charset=utf-8"}
         )
@@ -91,7 +93,7 @@ class TestPdfConverterEndpoint:
     def test_empty_pdf_regular_request(self, client, empty_pdf):
         """Test that empty PDF in regular request returns 400."""
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=empty_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -102,7 +104,7 @@ class TestPdfConverterEndpoint:
     def test_invalid_pdf_format(self, client, invalid_pdf):
         """Test that invalid PDF format returns 400."""
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=invalid_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -113,7 +115,7 @@ class TestPdfConverterEndpoint:
     def test_pdf_too_large(self, client, large_pdf):
         """Test that PDF exceeding size limit returns 413."""
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=large_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -132,7 +134,7 @@ class TestPdfConverterEndpoint:
         )
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -150,7 +152,7 @@ class TestHealthCheckHeader:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={
                 "Content-Type": "application/pdf",
@@ -166,7 +168,7 @@ class TestHealthCheckHeader:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={
                 "Content-Type": "application/pdf",
@@ -182,7 +184,7 @@ class TestHealthCheckHeader:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={
                 "Content-Type": "application/pdf",
@@ -198,7 +200,7 @@ class TestHealthCheckHeader:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=empty_pdf,
             headers={
                 "Content-Type": "application/pdf",
@@ -219,7 +221,7 @@ class TestResponseHeaders:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -232,7 +234,7 @@ class TestResponseHeaders:
         mock_convert.return_value = b'%PDF-1.4\nconverted'
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "application/pdf"}
         )
@@ -251,7 +253,7 @@ class TestErrorHandling:
 
     def test_405_for_wrong_method_on_converter(self, client):
         """Test that wrong HTTP method returns 405."""
-        response = client.get("/api/pdfconverter")
+        response = client.get(CONVERTER_PATH)
         assert response.status_code == 405
 
     @patch('app.main.convert_pdf_to_pdfa', new_callable=AsyncMock)
@@ -260,7 +262,7 @@ class TestErrorHandling:
         mock_convert.side_effect = RuntimeError("Unexpected error")
 
         response = client.post(
-            "/api/pdfconverter",
+            CONVERTER_PATH,
             content=valid_pdf,
             headers={"Content-Type": "application/pdf"}
         )
