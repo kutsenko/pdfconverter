@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  pdfconverter:
+    # Service für PDF zu PDF/A Konvertierung
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Alternative: Verwende ein bereits gebautes Image
+    # image: pdfconverter:latest
+
+    container_name: pdfconverter
+
+    # Port Mapping: Host:Container
+    # Standard-Port ist 8080
+    ports:
+      - "8080:8080"
+
+    # Umgebungsvariablen für Endpunkt-Konfiguration
+    # Diese können über eine .env Datei überschrieben werden
+    environment:
+      # API Endpunkt-Pfade (optional, Defaults werden verwendet wenn nicht gesetzt)
+      - HEALTH_PATH=/health
+      - METRICS_PATH=/metrics
+      - CONVERTER_PATH=/api/pdfconverter
+
+      # Weitere Konfiguration (optional)
+      # - LOG_LEVEL=INFO
+      # - TZ=Europe/Berlin
+
+    # Health Check Konfiguration
+    # Prüft regelmäßig ob der Service erreichbar ist
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Resource Limits
+    # Verhindert dass der Container zu viel Ressourcen verbraucht
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # Maximal 2 CPU Cores
+          memory: 2G       # Maximal 2GB RAM
+        reservations:
+          cpus: '0.5'      # Mindestens 0.5 CPU Cores
+          memory: 512M     # Mindestens 512MB RAM
+
+    # Restart Policy
+    # Container wird automatisch neu gestartet bei Fehler
+    restart: unless-stopped
+
+    # Optionale Volume Mounts
+    # Auskommentiert - aktivieren falls benötigt
+    # volumes:
+    #   # Persistente Logs
+    #   - ./logs:/app/logs
+    #   # Temporäre Dateien (für bessere Performance)
+    #   - /tmp/pdfconverter:/tmp
+
+    # Netzwerk-Konfiguration
+    networks:
+      - pdfconverter-network
+
+    # Logging Konfiguration
+    # Begrenzt die Log-Größe um Speicherplatz zu sparen
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Labels für bessere Organisation
+    labels:
+      - "com.pdfconverter.description=PDF to PDF/A conversion service"
+      - "com.pdfconverter.version=1.2.0"
+      - "traefik.enable=false"  # Für Traefik Reverse Proxy (falls verwendet)
+
+# Netzwerk-Definitionen
+networks:
+  pdfconverter-network:
+    driver: bridge
+    # Optional: Statisches Subnet
+    # ipam:
+    #   config:
+    #     - subnet: 172.20.0.0/16
+
+# Optionale Volume-Definitionen
+# volumes:
+#   pdfconverter-logs:
+#     driver: local

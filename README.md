@@ -141,19 +141,95 @@ docker run -p 8080:8080 \
 
 ### Mit docker-compose
 
+#### Einfaches Setup
+
+Das Projekt enthält eine vorkonfigurierte `docker-compose.yml` mit allen Best Practices.
+
+**Starten:**
+```bash
+# Service starten
+docker-compose up -d
+
+# Logs anzeigen
+docker-compose logs -f
+
+# Status prüfen
+docker-compose ps
+
+# Service stoppen
+docker-compose down
+```
+
+**Mit Umgebungsvariablen:**
+```bash
+# .env Datei erstellen (kopiere .env.example)
+cp .env.example .env
+
+# Passe .env nach Bedarf an
+nano .env
+
+# Starten mit .env Konfiguration
+docker-compose up -d
+```
+
+#### Production Setup mit Monitoring
+
+Für Production-Deployments steht `docker-compose.prod.yml` zur Verfügung, das zusätzlich Prometheus und Grafana enthält:
+
+```bash
+# Kompletten Monitoring Stack starten
+docker-compose -f docker-compose.prod.yml up -d
+
+# Alle Services sind verfügbar:
+# - PDF Converter: http://localhost:8080
+# - Prometheus: http://localhost:9090
+# - Grafana: http://localhost:3000 (admin/admin)
+# - Node Exporter: http://localhost:9100/metrics
+```
+
+Siehe [monitoring/README.md](monitoring/README.md) für Details zur Monitoring-Konfiguration.
+
+#### docker-compose.yml Features
+
+Die mitgelieferte `docker-compose.yml` enthält:
+
+✅ **Health Checks** - Automatische Überwachung des Service-Status
+✅ **Resource Limits** - CPU und Memory Limits (2 CPU, 2GB RAM)
+✅ **Restart Policy** - Automatischer Neustart bei Fehlern
+✅ **Logging Configuration** - Log Rotation (3x 10MB)
+✅ **Network Isolation** - Dediziertes Bridge Network
+✅ **Environment Variables** - Alle Endpunkte konfigurierbar
+✅ **Labels** - Service Metadata für Organisation
+
+#### Konfigurationsoptionen
+
+**Umgebungsvariablen (.env Datei):**
+```env
+HEALTH_PATH=/health
+METRICS_PATH=/metrics
+CONVERTER_PATH=/api/pdfconverter
+```
+
+**Port Mapping anpassen:**
 ```yaml
-version: '3.8'
-services:
-  pdfconverter:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - LOG_LEVEL=INFO
-      # Optional: Customize endpoint paths
-      - HEALTH_PATH=/health
-      - METRICS_PATH=/metrics
-      - CONVERTER_PATH=/api/pdfconverter
+ports:
+  - "8090:8080"  # Host:Container
+```
+
+**Resource Limits anpassen:**
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '4.0'
+      memory: 4G
+```
+
+**Volumes für Persistenz:**
+```yaml
+volumes:
+  - ./logs:/app/logs
+  - /tmp/pdfconverter:/tmp
 ```
 
 ## Verwendung
