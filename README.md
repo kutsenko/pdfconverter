@@ -45,22 +45,22 @@ Basiert auf dem Docker Image `kutsenko/pdfa-service:latest-minimal` und nutzt da
 docker build -t pdfconverter .
 
 # 2. Container starten
-docker run -p 8000:8000 pdfconverter
+docker run -p 8080:8080 pdfconverter
 
 # 3. PDF konvertieren
-curl -X POST http://localhost:8000/api/pdfconverter \
+curl -X POST http://localhost:8080/api/pdfconverter \
   -H "Content-Type: application/pdf" \
   --data-binary @input.pdf \
   -o output.pdf
 
 # 4. Metriken prüfen
-curl http://localhost:8000/metrics/
+curl http://localhost:8080/metrics/
 ```
 
 **Oder mit benutzerdefinierten Endpunkten:**
 
 ```bash
-docker run -p 8000:8000 \
+docker run -p 8080:8080 \
   -e CONVERTER_PATH=/convert \
   -e HEALTH_PATH=/status \
   -e METRICS_PATH=/monitoring \
@@ -126,13 +126,13 @@ docker build -t pdfconverter .
 ### Container starten
 
 ```bash
-docker run -p 8000:8000 pdfconverter
+docker run -p 8080:8080 pdfconverter
 ```
 
 **Mit benutzerdefinierten Endpunkt-URLs:**
 
 ```bash
-docker run -p 8000:8000 \
+docker run -p 8080:8080 \
   -e HEALTH_PATH=/status \
   -e METRICS_PATH=/monitoring/metrics \
   -e CONVERTER_PATH=/convert \
@@ -147,7 +147,7 @@ services:
   pdfconverter:
     build: .
     ports:
-      - "8000:8000"
+      - "8080:8080"
     environment:
       - LOG_LEVEL=INFO
       # Optional: Customize endpoint paths
@@ -162,7 +162,7 @@ services:
 
 **Reguläre PDF Konvertierung:**
 ```bash
-curl -X POST http://localhost:8000/api/pdfconverter \
+curl -X POST http://localhost:8080/api/pdfconverter \
   -H "Content-Type: application/pdf" \
   --data-binary @input.pdf \
   -o output.pdf
@@ -170,7 +170,7 @@ curl -X POST http://localhost:8000/api/pdfconverter \
 
 **Health Check:**
 ```bash
-curl -X POST http://localhost:8000/api/pdfconverter \
+curl -X POST http://localhost:8080/api/pdfconverter \
   -H "Content-Type: application/pdf" \
   -H "X-Health-Check: true" \
   --data-binary @input.pdf \
@@ -179,7 +179,7 @@ curl -X POST http://localhost:8000/api/pdfconverter \
 
 **Metriken abrufen:**
 ```bash
-curl http://localhost:8000/metrics
+curl http://localhost:8080/metrics
 ```
 
 ### Python Beispiel
@@ -193,7 +193,7 @@ with open('input.pdf', 'rb') as f:
 
 # Konvertieren
 response = requests.post(
-    'http://localhost:8000/api/pdfconverter',
+    'http://localhost:8080/api/pdfconverter',
     headers={'Content-Type': 'application/pdf'},
     data=pdf_bytes
 )
@@ -214,7 +214,7 @@ else:
 - **Base Image:** kutsenko/pdfa-service:latest-minimal
 - **Conversion:** pdfa Python module (via asyncio.to_thread)
 - **Metriken:** prometheus-client
-- **Port:** 8000
+- **Port:** 8080
 
 ### Konfiguration
 
@@ -230,7 +230,7 @@ else:
 
 **Beispiel:**
 ```bash
-docker run -p 8000:8000 \
+docker run -p 8080:8080 \
   -e HEALTH_PATH=/status \
   -e METRICS_PATH=/monitoring/metrics \
   -e CONVERTER_PATH=/api/v1/convert \
@@ -244,7 +244,7 @@ docker run -p 8000:8000 \
 | **MAX_PDF_SIZE** | 50MB | Nein* | Maximale PDF-Größe |
 | **PDF/A Level** | 2 | Nein* | PDF/A Konformitätsstufe |
 | **OCR Mode** | `skip_ocr_on_tagged_pdfs=True` | Nein* | OCR nur für PDFs ohne Text |
-| **Port** | 8000 | Ja (Docker) | HTTP Server Port |
+| **Port** | 8080 | Ja (Docker) | HTTP Server Port |
 
 \* *Diese Werte sind im Code definiert und können durch Rebuild mit angepasstem Code geändert werden.*
 
@@ -282,7 +282,7 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 
 # Development Server starten
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
 **Hinweis:** Die Tests nutzen Mocks für das pdfa-Modul und können ohne Docker-Container ausgeführt werden.
@@ -472,7 +472,7 @@ rate(pdf_input_size_bytes_sum[5m]) / rate(pdf_input_size_bytes_count[5m])
 ```dockerfile
 # Dockerfile
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+  CMD curl -f http://localhost:8080/health || exit 1
 ```
 
 **Resource Limits:**
@@ -513,7 +513,7 @@ spec:
       - name: pdfconverter
         image: pdfconverter:latest
         ports:
-        - containerPort: 8000
+        - containerPort: 8080
         env:
         - name: HEALTH_PATH
           value: "/health"
@@ -524,13 +524,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8000
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 30
         readinessProbe:
           httpGet:
             path: /health
-            port: 8000
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
         resources:
@@ -549,8 +549,8 @@ spec:
   selector:
     app: pdfconverter
   ports:
-  - port: 8000
-    targetPort: 8000
+  - port: 8080
+    targetPort: 8080
   type: ClusterIP
 ```
 
@@ -607,7 +607,7 @@ docker run -m 2g pdfconverter
 **Problem: Slow conversion times**
 ```bash
 # Prüfen: Metriken analysieren
-curl http://localhost:8000/metrics/ | grep duration
+curl http://localhost:8080/metrics/ | grep duration
 
 # Lösung: Mehrere Replicas starten
 docker-compose up --scale pdfconverter=3
