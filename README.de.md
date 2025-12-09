@@ -35,7 +35,7 @@ Basiert auf dem Docker Image `kutsenko/pdfa-service:latest-minimal` und nutzt da
 - 📊 **Prometheus Metriken:** Vollständiges Monitoring mit Duration, Size, Error Tracking
 - 🏥 **Health Check Support:** Dedizierter Header (`X-Health-Check`) für Monitoring
 - 📝 **Strukturiertes Logging:** DEBUG für Health Checks, INFO für reguläre Requests
-- 🐳 **Docker-Ready:** Vollständig containerisiert mit docker-compose Support
+- 🐳 **Docker-Ready:** Vollständig containerisiert mit Docker Support
 - ✅ **Production-Ready:** 87% Test Coverage, umfassende Error Handling
 
 ## Quick Start
@@ -141,11 +141,9 @@ docker run -p 8080:8080 \
 
 ### Mit docker-compose
 
-#### Einfaches Setup
+Das Projekt enthält eine vorkonfigurierte `docker-compose.yml` mit Umgebungsvariablen-Platzhaltern.
 
-Das Projekt enthält eine vorkonfigurierte `docker-compose.yml` mit allen Best Practices.
-
-**Starten:**
+**Starten mit Default-Werten:**
 ```bash
 # Service starten
 docker-compose up -d
@@ -160,45 +158,29 @@ docker-compose ps
 docker-compose down
 ```
 
-**Mit Umgebungsvariablen:**
+**Mit eigenen Umgebungsvariablen (.env Datei):**
 ```bash
-# .env Datei erstellen (kopiere .env.example)
-cp .env.example .env
-
-# Passe .env nach Bedarf an
-nano .env
+# .env Datei erstellen
+cat > .env << EOF
+HEALTH_PATH=/status
+METRICS_PATH=/monitoring
+CONVERTER_PATH=/convert
+EOF
 
 # Starten mit .env Konfiguration
 docker-compose up -d
 ```
 
-#### Production Setup mit Monitoring
+Die `docker-compose.yml` verwendet das Format `${VARIABLE:-default}` um sowohl .env Dateien als auch inline Umgebungsvariablen zu unterstützen.
 
-Für Production-Deployments steht `docker-compose.prod.yml` zur Verfügung, das zusätzlich Prometheus und Grafana enthält:
-
-```bash
-# Kompletten Monitoring Stack starten
-docker-compose -f docker-compose.prod.yml up -d
-
-# Alle Services sind verfügbar:
-# - PDF Converter: http://localhost:8080
-# - Prometheus: http://localhost:9090
-# - Grafana: http://localhost:3000 (admin/admin)
-# - Node Exporter: http://localhost:9100/metrics
-```
-
-Siehe [monitoring/README.md](monitoring/README.md) für Details zur Monitoring-Konfiguration.
-
-#### docker-compose.yml Features
-
-Die mitgelieferte `docker-compose.yml` enthält:
+**docker-compose.yml Features:**
 
 ✅ **Health Checks** - Automatische Überwachung des Service-Status
 ✅ **Resource Limits** - CPU und Memory Limits (2 CPU, 2GB RAM)
 ✅ **Restart Policy** - Automatischer Neustart bei Fehlern
 ✅ **Logging Configuration** - Log Rotation (3x 10MB)
+✅ **Environment Variables** - Flexible Konfiguration mit Platzhaltern
 ✅ **Network Isolation** - Dediziertes Bridge Network
-✅ **Environment Variables** - Alle Endpunkte konfigurierbar
 ✅ **Labels** - Service Metadata für Organisation
 
 #### Konfigurationsoptionen
@@ -382,8 +364,7 @@ pdfconverter/
 ├── Dockerfile
 ├── requirements.txt
 ├── requirements-dev.txt # Development Dependencies
-├── pytest.ini           # Pytest Konfiguration
-├── Makefile             # Build & Test Commands
+├── pyproject.toml       # Tool-Konfiguration (Black, Ruff, Pytest, MyPy)
 └── README.md
 ```
 
@@ -417,23 +398,25 @@ pytest -vv
 pytest -x
 ```
 
-### Makefile Commands
+### Direkte Befehle
 
 ```bash
 # Tests
-make test              # Alle Tests
-make test-cov          # Mit Coverage
-make test-fast         # Stop bei erstem Fehler
-make test-api          # Nur API Tests
-make test-converter    # Nur Converter Tests
-make test-metrics      # Nur Metrics Tests
+pytest                                    # Alle Tests
+pytest --cov=app --cov-report=html        # Mit Coverage
+pytest -x                                 # Stop bei erstem Fehler
+pytest tests/test_api.py -v               # Nur API Tests
+pytest tests/test_converter.py -v         # Nur Converter Tests
+pytest tests/test_metrics.py -v           # Nur Metrics Tests
 
-# Code Quality
-make lint              # Linter ausführen
-make format            # Code formatieren
+# Code Quality (nutzt pyproject.toml Konfiguration)
+ruff check app tests                      # Linting mit Ruff
+black app tests                           # Code Formatierung mit Black
+mypy app                                  # Type Checking
 
 # Coverage Report anzeigen
-make coverage-html
+pytest --cov=app --cov-report=html
+xdg-open htmlcov/index.html  # oder open auf macOS
 ```
 
 ### Test-Kategorien

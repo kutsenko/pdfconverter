@@ -37,7 +37,7 @@ Based on Docker image `kutsenko/pdfa-service:latest-minimal` and uses the pdfa P
 - 📊 **Prometheus Metrics:** Complete monitoring with duration, size, error tracking
 - 🏥 **Health Check Support:** Dedicated header (`X-Health-Check`) for monitoring
 - 📝 **Structured Logging:** DEBUG for health checks, INFO for regular requests
-- 🐳 **Docker-Ready:** Fully containerized with docker-compose support
+- 🐳 **Docker-Ready:** Fully containerized with Docker support
 - ✅ **Production-Ready:** 87% test coverage, comprehensive error handling
 
 ## Quick Start
@@ -143,20 +143,23 @@ docker run -p 8080:8080 \
 
 ### With docker-compose
 
-```yaml
-version: '3.8'
-services:
-  pdfconverter:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - LOG_LEVEL=INFO
-      # Optional: Customize endpoint paths
-      - HEALTH_PATH=/health
-      - METRICS_PATH=/metrics
-      - CONVERTER_PATH=/api/pdfconverter
+The project includes a pre-configured `docker-compose.yml` with environment variable placeholders:
+
+```bash
+# Start with default values
+docker-compose up -d
+
+# Or customize via .env file
+cat > .env << EOF
+HEALTH_PATH=/status
+METRICS_PATH=/monitoring
+CONVERTER_PATH=/convert
+EOF
+
+docker-compose up -d
 ```
+
+The `docker-compose.yml` uses the format `${VARIABLE:-default}` to support both .env files and inline environment variables.
 
 ## Usage
 
@@ -290,8 +293,7 @@ pdfconverter/
 ├── Dockerfile
 ├── requirements.txt
 ├── requirements-dev.txt # Development Dependencies
-├── pytest.ini           # Pytest Configuration
-├── Makefile             # Build & Test Commands
+├── pyproject.toml       # Tool Configuration (Black, Ruff, Pytest, MyPy)
 └── README.md
 ```
 
@@ -325,23 +327,25 @@ pytest -vv
 pytest -x
 ```
 
-### Makefile Commands
+### Direct Commands
 
 ```bash
 # Tests
-make test              # All tests
-make test-cov          # With coverage
-make test-fast         # Stop on first failure
-make test-api          # Only API tests
-make test-converter    # Only converter tests
-make test-metrics      # Only metrics tests
+pytest                                    # All tests
+pytest --cov=app --cov-report=html        # With coverage
+pytest -x                                 # Stop on first failure
+pytest tests/test_api.py -v               # Only API tests
+pytest tests/test_converter.py -v         # Only converter tests
+pytest tests/test_metrics.py -v           # Only metrics tests
 
-# Code quality
-make lint              # Run linter
-make format            # Format code
+# Code quality (using pyproject.toml configuration)
+ruff check app tests                      # Lint with Ruff
+black app tests                           # Format code with Black
+mypy app                                  # Type checking
 
 # Coverage report
-make coverage-html
+pytest --cov=app --cov-report=html
+open htmlcov/index.html  # or xdg-open on Linux
 ```
 
 ### Test Categories

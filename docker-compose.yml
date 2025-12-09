@@ -17,17 +17,19 @@ services:
     ports:
       - "8080:8080"
 
-    # Umgebungsvariablen für Endpunkt-Konfiguration
-    # Diese können über eine .env Datei überschrieben werden
+    # Environment Variables Configuration
+    # Override these values via .env file or set them here
+    # Format: VARIABLE_NAME=${VARIABLE_NAME:-default_value}
     environment:
-      # API Endpunkt-Pfade (optional, Defaults werden verwendet wenn nicht gesetzt)
-      - HEALTH_PATH=/health
-      - METRICS_PATH=/metrics
-      - CONVERTER_PATH=/api/pdfconverter
+      # API Endpoint Paths (use defaults if not set)
+      - HEALTH_PATH=${HEALTH_PATH:-/health}
+      - METRICS_PATH=${METRICS_PATH:-/metrics}
+      - CONVERTER_PATH=${CONVERTER_PATH:-/api/pdfconverter}
 
-      # Weitere Konfiguration (optional)
-      # - LOG_LEVEL=INFO
-      # - TZ=Europe/Berlin
+      # Optional Configuration (uncomment and set as needed)
+      # - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # - TZ=${TZ:-UTC}
+      # - MAX_PDF_SIZE=${MAX_PDF_SIZE:-52428800}  # 50MB in bytes
 
     # Health Check Konfiguration
     # Prüft regelmäßig ob der Service erreichbar ist
