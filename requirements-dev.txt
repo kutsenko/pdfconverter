@@ -15,6 +15,7 @@ ruff==0.8.4  # Modern linter (replaces flake8, pylint)
 flake8==7.0.0  # Legacy linter (kept for compatibility)
 pylint==3.0.3  # Legacy linter (kept for compatibility)
 mypy==1.13.0
+bandit==1.9.2  # Security linting
 pip-audit==2.10.0  # Security vulnerability scanner
 pre-commit==4.0.1  # Pre-commit hook framework
 
