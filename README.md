@@ -199,10 +199,118 @@ pdfconverter/
 │   ├── main.py          # FastAPI Application
 │   ├── converter.py     # PDF Conversion Logic
 │   └── metrics.py       # Prometheus Metrics
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py      # Test Fixtures
+│   ├── test_api.py      # API Integration Tests
+│   ├── test_converter.py # Converter Unit Tests
+│   ├── test_metrics.py  # Metrics Tests
+│   └── README.md        # Test Dokumentation
 ├── Dockerfile
 ├── requirements.txt
+├── requirements-dev.txt # Development Dependencies
+├── pytest.ini           # Pytest Konfiguration
+├── Makefile             # Build & Test Commands
 └── README.md
 ```
+
+## Testing
+
+### Test Installation
+
+```bash
+# Installiere Test-Dependencies
+pip install -r requirements-dev.txt
+```
+
+### Tests ausführen
+
+```bash
+# Alle Tests
+pytest
+
+# Mit Coverage Report
+pytest --cov=app --cov-report=html
+
+# Einzelne Test-Dateien
+pytest tests/test_api.py
+pytest tests/test_converter.py
+pytest tests/test_metrics.py
+
+# Verbose Output
+pytest -vv
+
+# Stop bei erstem Fehler
+pytest -x
+```
+
+### Makefile Commands
+
+```bash
+# Tests
+make test              # Alle Tests
+make test-cov          # Mit Coverage
+make test-fast         # Stop bei erstem Fehler
+make test-api          # Nur API Tests
+make test-converter    # Nur Converter Tests
+make test-metrics      # Nur Metrics Tests
+
+# Code Quality
+make lint              # Linter ausführen
+make format            # Code formatieren
+
+# Coverage Report anzeigen
+make coverage-html
+```
+
+### Test-Kategorien
+
+**API Integration Tests (30+ Tests)**
+- Health und Metrics Endpunkte
+- PDF Converter Endpunkt Funktionalität
+- Content-Type Validierung
+- Fehlerbehandlung (400, 413, 415, 422, 500)
+- Health Check Header Verarbeitung
+- Response Headers
+- Prometheus Metriken Integration
+
+**Converter Unit Tests (15+ Tests)**
+- PDF Validierung
+- Erfolgreiche Konvertierung
+- Error Handling
+- Logging (INFO/DEBUG)
+- pdfa-cli Command Structure
+- Temporary Files Cleanup
+
+**Metrics Tests (25+ Tests)**
+- Metric Definitionen
+- Histogram Buckets
+- Metric Labels
+- Prometheus Naming Conventions
+- Integration mit App
+
+### Coverage
+
+Ziel: **> 80% Code Coverage**
+
+```bash
+# Coverage Report in Terminal
+pytest --cov=app --cov-report=term-missing
+
+# HTML Coverage Report
+pytest --cov=app --cov-report=html
+open htmlcov/index.html
+```
+
+### Continuous Integration
+
+Für CI/CD Pipelines:
+
+```bash
+pytest --cov=app --cov-report=xml --junitxml=junit.xml --cov-fail-under=80
+```
+
+Mehr Details in [tests/README.md](tests/README.md).
 
 ## Optimierung
 
