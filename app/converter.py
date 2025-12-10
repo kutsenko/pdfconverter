@@ -64,7 +64,7 @@ def _count_pdf_images(pdf_path: Path) -> int:
             for page in pdf.pages:
                 if "/Resources" in page and "/XObject" in page.Resources:
                     xobjects = page.Resources.XObject
-                    for obj_name in xobjects:
+                    for obj_name in xobjects:  # type: ignore[attr-defined]
                         xobject = xobjects[obj_name]
                         if "/Subtype" in xobject and xobject.Subtype == "/Image":
                             image_count += 1
@@ -98,7 +98,7 @@ def _is_full_page_image_pdf(pdf_path: Path) -> bool:
                 xobjects = page.Resources.XObject
                 images = [
                     xobjects[n]
-                    for n in xobjects
+                    for n in xobjects  # type: ignore[attr-defined]
                     if "/Subtype" in xobjects[n] and xobjects[n].Subtype == "/Image"
                 ]
 
