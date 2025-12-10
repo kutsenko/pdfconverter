@@ -1,14 +1,13 @@
 """Tests for PDF type detection and optimization selection."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from app.converter import (
     PdfType,
     _count_pdf_images,
-    _is_full_page_image_pdf,
     _detect_pdf_type,
+    _is_full_page_image_pdf,
 )
 
 

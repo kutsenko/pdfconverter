@@ -367,7 +367,7 @@ class TestOptimizationByPdfType:
         mock_read.return_value = output_pdf
 
         # Act
-        result = await convert_pdf_to_pdfa(input_pdf)
+        await convert_pdf_to_pdfa(input_pdf)
 
         # Assert
         # Verify ocrmypdf.ocr was called with optimize=1
@@ -397,7 +397,7 @@ class TestOptimizationByPdfType:
         mock_read.return_value = output_pdf
 
         # Act
-        result = await convert_pdf_to_pdfa(input_pdf)
+        await convert_pdf_to_pdfa(input_pdf)
 
         # Assert
         call_kwargs = mock_to_thread.call_args.kwargs
@@ -426,7 +426,7 @@ class TestOptimizationByPdfType:
         mock_read.return_value = output_pdf
 
         # Act
-        result = await convert_pdf_to_pdfa(input_pdf)
+        await convert_pdf_to_pdfa(input_pdf)
 
         # Assert
         # Verify ocrmypdf.ocr was called with optimize=0 (safe fallback)
@@ -450,7 +450,6 @@ class TestOptimizationByPdfType:
         mock_detect,
     ):
         """Verify that detected PDF type is logged."""
-        import logging
 
         from app.converter import PdfType, convert_pdf_to_pdfa
 
@@ -489,7 +488,6 @@ class TestOptimizationByPdfType:
         mock_detect,
     ):
         """Verify that optimization level is logged."""
-        import logging
 
         from app.converter import PdfType, convert_pdf_to_pdfa
 
