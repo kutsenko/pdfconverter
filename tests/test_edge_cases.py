@@ -367,7 +367,9 @@ class TestConversionErrorTypes:
     def test_runtime_error_from_converter(self, mock_convert, client, valid_pdf):
         """Test RuntimeError from converter returns 422."""
         # Arrange - OCRmyPDF raises RuntimeError for conversion failures
-        mock_convert.side_effect = RuntimeError("PDF conversion failed: OCR engine failure")
+        mock_convert.side_effect = RuntimeError(
+            "PDF conversion failed: OCR engine failure"
+        )
 
         # Act
         response = client.post(
