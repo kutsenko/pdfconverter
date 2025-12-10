@@ -1,12 +1,24 @@
 import asyncio
 import logging
 import tempfile
+from enum import Enum
 from pathlib import Path
 
 import ocrmypdf
 import pikepdf
 
+from .converter_config import get_optimizer_config
+
 logger = logging.getLogger(__name__)
+
+
+class PdfType(Enum):
+    """PDF content type classification."""
+
+    TEXT_ONLY = "text_only"
+    SCANNED_IMAGE = "scanned_image"
+    MIXED_CONTENT = "mixed_content"
+    UNKNOWN = "unknown"
 
 
 def _is_pdf_tagged(pdf_path: Path) -> bool:
@@ -35,6 +47,95 @@ def _is_pdf_tagged(pdf_path: Path) -> bool:
     except Exception as e:
         logger.warning("Failed to check PDF tags: %s", e)
         return False
+
+
+def _count_pdf_images(pdf_path: Path) -> int:
+    """Count embedded images in PDF using pikepdf.
+
+    Args:
+        pdf_path: Path to PDF file
+
+    Returns:
+        Number of images found, or -1 if counting fails
+    """
+    try:
+        with pikepdf.open(pdf_path) as pdf:
+            image_count = 0
+            for page in pdf.pages:
+                if "/Resources" in page and "/XObject" in page.Resources:
+                    xobjects = page.Resources.XObject
+                    for obj_name in xobjects:
+                        xobject = xobjects[obj_name]
+                        if "/Subtype" in xobject and xobject.Subtype == "/Image":
+                            image_count += 1
+            return image_count
+    except Exception as e:
+        logger.warning("Failed to count PDF images: %s", e)
+        return -1
+
+
+def _is_full_page_image_pdf(pdf_path: Path) -> bool:
+    """Check if PDF is primarily full-page images (scanned document).
+
+    Heuristic: If >80% of pages have exactly one image, classify as scanned.
+
+    Args:
+        pdf_path: Path to PDF file
+
+    Returns:
+        True if PDF appears to be a scanned document, False otherwise
+    """
+    try:
+        with pikepdf.open(pdf_path) as pdf:
+            if len(pdf.pages) == 0:
+                return False
+
+            full_page_count = 0
+            for page in pdf.pages:
+                if "/Resources" not in page or "/XObject" not in page.Resources:
+                    continue
+
+                xobjects = page.Resources.XObject
+                images = [
+                    xobjects[n]
+                    for n in xobjects
+                    if "/Subtype" in xobjects[n] and xobjects[n].Subtype == "/Image"
+                ]
+
+                if len(images) == 1:
+                    full_page_count += 1
+
+            return (full_page_count / len(pdf.pages)) > 0.8
+    except Exception as e:
+        logger.warning("Failed to analyze PDF pages: %s", e)
+        return False
+
+
+def _detect_pdf_type(pdf_path: Path) -> PdfType:
+    """Detect PDF content type for optimization strategy.
+
+    Args:
+        pdf_path: Path to PDF file
+
+    Returns:
+        PdfType enum indicating the detected content type
+    """
+    try:
+        image_count = _count_pdf_images(pdf_path)
+
+        if image_count < 0:
+            return PdfType.UNKNOWN
+
+        if image_count == 0:
+            return PdfType.TEXT_ONLY
+
+        if _is_full_page_image_pdf(pdf_path):
+            return PdfType.SCANNED_IMAGE
+        else:
+            return PdfType.MIXED_CONTENT
+    except Exception as e:
+        logger.warning("PDF type detection failed: %s", e)
+        return PdfType.UNKNOWN
 
 
 async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -> bytes:
@@ -71,10 +172,30 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
             # Write input PDF
             input_path.write_bytes(pdf_bytes)
 
+            # Detect PDF type for optimization strategy
+            pdf_type = _detect_pdf_type(input_path)
+            logger.log(log_level, "Detected PDF type: %s", pdf_type.value)
+
             # Check if PDF is already tagged (skip OCR if true)
             skip_ocr = _is_pdf_tagged(input_path)
             if skip_ocr:
                 logger.log(log_level, "PDF is tagged, skipping OCR")
+
+            # Get optimization level based on PDF type
+            config = get_optimizer_config()
+            optimize_level = {
+                PdfType.TEXT_ONLY: config.text_only_optimize,
+                PdfType.SCANNED_IMAGE: config.scanned_optimize,
+                PdfType.MIXED_CONTENT: config.mixed_optimize,
+                PdfType.UNKNOWN: config.unknown_optimize,
+            }[pdf_type]
+
+            logger.log(
+                log_level,
+                "Using optimization level %d for %s PDF",
+                optimize_level,
+                pdf_type.value,
+            )
 
             logger.log(log_level, "Executing OCRmyPDF conversion")
 
@@ -87,7 +208,7 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
                 language="deu+eng",  # German + English
                 output_type="pdfa-2",  # PDF/A-2 standard
                 skip_text=skip_ocr,  # Skip OCR on tagged PDFs
-                optimize=0,  # No optimization (faster)
+                optimize=optimize_level,  # Dynamic optimization based on PDF type
                 jobs=1,  # Single thread (sufficient for single-document API)
                 progress_bar=False,  # No progress bar (not needed in API)
                 use_threads=True,  # Enable threading within OCRmyPDF
@@ -103,10 +224,16 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
             if not output_bytes:
                 raise RuntimeError("Conversion failed: output file is empty")
 
+            # Calculate and log size change
+            size_change = len(output_bytes) - len(pdf_bytes)
+            size_change_pct = (size_change / len(pdf_bytes)) * 100
+
             logger.log(
                 log_level,
-                "Conversion completed, output size=%d bytes",
+                "Conversion completed, output=%d bytes (change: %+d bytes, %+.1f%%)",
                 len(output_bytes),
+                size_change,
+                size_change_pct,
             )
 
             return output_bytes

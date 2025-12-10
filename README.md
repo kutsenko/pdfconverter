@@ -7,7 +7,7 @@ Uses OCRmyPDF for direct PDF to PDF/A conversion with OCR support.
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
-[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen.svg)](https://pytest.org)
+[![Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen.svg)](https://pytest.org)
 
 **[Deutsche Version](README.de.md)** | English
 
@@ -33,12 +33,13 @@ Uses OCRmyPDF for direct PDF to PDF/A conversion with OCR support.
 ## Features
 
 - ⚡ **Fast Conversion:** Average ~0.5s per PDF (Python module instead of CLI)
+- 🎯 **Content-Aware Optimization:** Automatic PDF type detection with optimized compression
 - 🔧 **Configurable Endpoints:** All URLs customizable via environment variables
 - 📊 **Prometheus Metrics:** Complete monitoring with duration, size, error tracking
 - 🏥 **Health Check Support:** Dedicated header (`X-Health-Check`) for monitoring
 - 📝 **Structured Logging:** DEBUG for health checks, INFO for regular requests
 - 🐳 **Docker-Ready:** Fully containerized with Docker support
-- ✅ **Production-Ready:** 87% test coverage, comprehensive error handling
+- ✅ **Production-Ready:** 88% test coverage (139 tests), comprehensive error handling
 
 ## Quick Start
 
@@ -235,6 +236,39 @@ else:
 - **MAX_PDF_SIZE:** 50MB (52428800 bytes)
 - **PDF/A Level:** 2
 - **OCR:** Enabled with `skip_ocr_on_tagged_pdfs=True` (optimal performance)
+
+**PDF Optimization (Content-Aware):**
+
+The service automatically detects PDF content type and applies appropriate optimization:
+
+- **Text-only PDFs**: Lossless compression (optimize=1)
+- **Scanned PDFs**: Lossless compression (optimize=1)
+- **Mixed PDFs**: Lossless compression (optimize=1)
+- **Unknown PDFs**: No optimization (optimize=0, safe fallback)
+
+**PDF Optimization Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PDF_TEXT_OPTIMIZE` | `1` | Optimization level for text-only PDFs (0-3) |
+| `PDF_SCANNED_OPTIMIZE` | `1` | Optimization level for scanned PDFs (0-3) |
+| `PDF_MIXED_OPTIMIZE` | `1` | Optimization level for mixed content PDFs (0-3) |
+| `PDF_UNKNOWN_OPTIMIZE` | `0` | Fallback optimization level (0-3) |
+
+**Optimization Levels:**
+- `0`: No optimization (fastest conversion, largest files)
+- `1`: Lossless compression (recommended, 50-80% size reduction for text PDFs)
+- `2`: Lossy image compression (smaller files, minimal quality loss)
+- `3`: Aggressive compression (smallest files, visible quality loss possible)
+
+**Example with custom optimization:**
+
+```bash
+docker run -p 8080:8080 \
+  -e PDF_TEXT_OPTIMIZE=1 \
+  -e PDF_SCANNED_OPTIMIZE=1 \
+  pdfconverter
+```
 
 ### Logging
 

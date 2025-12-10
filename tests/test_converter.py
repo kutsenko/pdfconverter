@@ -308,3 +308,248 @@ class TestPdfValidation:
         for header in invalid_headers:
             with pytest.raises((ValueError, Exception)):
                 await convert_pdf_to_pdfa(header + b"content")
+
+
+class TestOptimizationByPdfType:
+    """Tests for optimization level selection based on PDF type."""
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    async def test_text_only_pdf_uses_optimize_1(
+        self, mock_read, mock_exists, mock_to_thread, mock_tagged, mock_detect
+    ):
+        """Verify text-only PDFs use optimization level 1."""
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\ntext content"
+        output_pdf = b"%PDF-1.4\nconverted content"
+
+        mock_detect.return_value = PdfType.TEXT_ONLY
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        result = await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert
+        assert result == output_pdf
+        # Verify ocrmypdf.ocr was called with optimize=1
+        call_kwargs = mock_to_thread.call_args.kwargs
+        assert call_kwargs["optimize"] == 1
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    async def test_scanned_pdf_uses_optimize_1(
+        self, mock_read, mock_exists, mock_to_thread, mock_tagged, mock_detect
+    ):
+        """Verify scanned PDFs use optimization level 1 (conservative)."""
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\nscanned content"
+        output_pdf = b"%PDF-1.4\nconverted content"
+
+        mock_detect.return_value = PdfType.SCANNED_IMAGE
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        result = await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert
+        # Verify ocrmypdf.ocr was called with optimize=1
+        call_kwargs = mock_to_thread.call_args.kwargs
+        assert call_kwargs["optimize"] == 1
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    async def test_mixed_pdf_uses_optimize_1(
+        self, mock_read, mock_exists, mock_to_thread, mock_tagged, mock_detect
+    ):
+        """Verify mixed content PDFs use optimization level 1."""
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\nmixed content"
+        output_pdf = b"%PDF-1.4\nconverted content"
+
+        mock_detect.return_value = PdfType.MIXED_CONTENT
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        result = await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert
+        call_kwargs = mock_to_thread.call_args.kwargs
+        assert call_kwargs["optimize"] == 1
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    async def test_unknown_pdf_uses_optimize_0(
+        self, mock_read, mock_exists, mock_to_thread, mock_tagged, mock_detect
+    ):
+        """Verify unknown PDFs fall back to optimization level 0 (safe)."""
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\nunknown content"
+        output_pdf = b"%PDF-1.4\nconverted content"
+
+        mock_detect.return_value = PdfType.UNKNOWN
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        result = await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert
+        # Verify ocrmypdf.ocr was called with optimize=0 (safe fallback)
+        call_kwargs = mock_to_thread.call_args.kwargs
+        assert call_kwargs["optimize"] == 0
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    @patch("app.converter.logger")
+    async def test_pdf_type_is_logged(
+        self,
+        mock_logger,
+        mock_read,
+        mock_exists,
+        mock_to_thread,
+        mock_tagged,
+        mock_detect,
+    ):
+        """Verify that detected PDF type is logged."""
+        import logging
+
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\ntest content"
+        output_pdf = b"%PDF-1.4\nconverted"
+
+        mock_detect.return_value = PdfType.TEXT_ONLY
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert - Check that PDF type was logged
+        log_calls = mock_logger.log.call_args_list
+        pdf_type_logged = any(
+            "text_only" in str(call) for call in log_calls
+        )
+        assert pdf_type_logged
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    @patch("app.converter.logger")
+    async def test_optimization_level_is_logged(
+        self,
+        mock_logger,
+        mock_read,
+        mock_exists,
+        mock_to_thread,
+        mock_tagged,
+        mock_detect,
+    ):
+        """Verify that optimization level is logged."""
+        import logging
+
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\ntest content"
+        output_pdf = b"%PDF-1.4\nconverted"
+
+        mock_detect.return_value = PdfType.TEXT_ONLY
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert - Check that optimization level was logged
+        log_calls = mock_logger.log.call_args_list
+        optimization_logged = any(
+            "optimization level" in str(call).lower() for call in log_calls
+        )
+        assert optimization_logged
+
+    @pytest.mark.asyncio
+    @patch("app.converter._detect_pdf_type")
+    @patch("app.converter._is_pdf_tagged")
+    @patch("asyncio.to_thread", new_callable=AsyncMock)
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_bytes")
+    @patch("app.converter.logger")
+    async def test_size_change_is_logged(
+        self,
+        mock_logger,
+        mock_read,
+        mock_exists,
+        mock_to_thread,
+        mock_tagged,
+        mock_detect,
+    ):
+        """Verify that size change (bytes and percentage) is logged."""
+        from app.converter import PdfType, convert_pdf_to_pdfa
+
+        # Arrange
+        input_pdf = b"%PDF-1.4\ntest content" * 100  # Larger input
+        output_pdf = b"%PDF-1.4\nsmaller"  # Smaller output
+
+        mock_detect.return_value = PdfType.TEXT_ONLY
+        mock_tagged.return_value = False
+        mock_to_thread.return_value = None
+        mock_exists.return_value = True
+        mock_read.return_value = output_pdf
+
+        # Act
+        await convert_pdf_to_pdfa(input_pdf)
+
+        # Assert - Check that size change was logged
+        log_calls = mock_logger.log.call_args_list
+        size_change_logged = any(
+            "change:" in str(call) and "%" in str(call) for call in log_calls
+        )
+        assert size_change_logged

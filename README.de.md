@@ -7,7 +7,7 @@ Nutzt OCRmyPDF für direkte PDF zu PDF/A Konvertierung mit OCR-Unterstützung.
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
-[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen.svg)](https://pytest.org)
+[![Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen.svg)](https://pytest.org)
 
 ## Inhaltsverzeichnis
 
@@ -31,12 +31,13 @@ Nutzt OCRmyPDF für direkte PDF zu PDF/A Konvertierung mit OCR-Unterstützung.
 ## Features
 
 - ⚡ **Schnelle Konvertierung:** Durchschnittlich ~0.5s pro PDF (Python-Modul statt CLI)
+- 🎯 **Content-Aware Optimierung:** Automatische PDF-Typen-Erkennung mit optimierter Kompression
 - 🔧 **Konfigurierbare Endpunkte:** Alle URLs über Umgebungsvariablen anpassbar
 - 📊 **Prometheus Metriken:** Vollständiges Monitoring mit Duration, Size, Error Tracking
 - 🏥 **Health Check Support:** Dedizierter Header (`X-Health-Check`) für Monitoring
 - 📝 **Strukturiertes Logging:** DEBUG für Health Checks, INFO für reguläre Requests
 - 🐳 **Docker-Ready:** Vollständig containerisiert mit Docker Support
-- ✅ **Production-Ready:** 87% Test Coverage, umfassende Error Handling
+- ✅ **Production-Ready:** 88% Test Coverage (139 Tests), umfassende Error Handling
 
 ## Quick Start
 
@@ -306,6 +307,39 @@ docker run -p 8080:8080 \
 | **Port** | 8080 | Ja (Docker) | HTTP Server Port |
 
 \* *Diese Werte sind im Code definiert und können durch Rebuild mit angepasstem Code geändert werden.*
+
+##### PDF-Optimierung (Content-Aware)
+
+Der Service erkennt automatisch den PDF-Typ und wendet entsprechende Optimierung an:
+
+- **Text-only PDFs**: Verlustfreie Kompression (optimize=1)
+- **Gescannte PDFs**: Verlustfreie Kompression (optimize=1)
+- **Gemischte PDFs**: Verlustfreie Kompression (optimize=1)
+- **Unbekannte PDFs**: Keine Optimierung (optimize=0, sicherer Fallback)
+
+**PDF-Optimierungs-Umgebungsvariablen:**
+
+| Variable | Default | Beschreibung |
+|----------|---------|--------------|
+| `PDF_TEXT_OPTIMIZE` | `1` | Optimierung für Text-PDFs (0-3) |
+| `PDF_SCANNED_OPTIMIZE` | `1` | Optimierung für gescannte PDFs (0-3) |
+| `PDF_MIXED_OPTIMIZE` | `1` | Optimierung für gemischte PDFs (0-3) |
+| `PDF_UNKNOWN_OPTIMIZE` | `0` | Fallback-Optimierung (0-3) |
+
+**Optimierungsstufen:**
+- `0`: Keine Optimierung (schnellste Konvertierung, größte Dateien)
+- `1`: Verlustfreie Kompression (empfohlen, 50-80% Reduktion für Text-PDFs)
+- `2`: Verlustbehaftete Bildkompression (kleinere Dateien, minimaler Qualitätsverlust)
+- `3`: Aggressive Kompression (kleinste Dateien, sichtbarer Qualitätsverlust möglich)
+
+**Beispiel mit eigener Optimierung:**
+
+```bash
+docker run -p 8080:8080 \
+  -e PDF_TEXT_OPTIMIZE=1 \
+  -e PDF_SCANNED_OPTIMIZE=1 \
+  pdfconverter
+```
 
 ### Logging
 
