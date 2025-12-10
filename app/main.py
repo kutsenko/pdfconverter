@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 import time
 from typing import Any
 
@@ -194,8 +193,8 @@ async def convert_pdf_endpoint(request: Request) -> Response:
             # Invalid PDF format
             logger.warning("Invalid PDF: %s", e)
             raise HTTPException(status_code=400, detail=f"Invalid PDF: {str(e)}")
-        except subprocess.CalledProcessError as e:
-            # Conversion failed
+        except RuntimeError as e:
+            # Conversion failed (OCRmyPDF wraps errors in RuntimeError)
             logger.error("Conversion failed: %s", e)
             raise HTTPException(status_code=422, detail="PDF conversion failed")
         except Exception:

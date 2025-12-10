@@ -37,7 +37,7 @@ class TestConvertPdfToPdfa:
         input_pdf = b"%PDF-1.4\ntest content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_to_thread.return_value = None  # pdfa_convert doesn't return anything
+        mock_to_thread.return_value = None  # ocrmypdf.ocr doesn't return anything
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -119,10 +119,10 @@ class TestConvertPdfToPdfa:
     @patch("asyncio.to_thread", new_callable=AsyncMock)
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
-    async def test_pdfa_module_call_structure(
+    async def test_ocrmypdf_call_structure(
         self, mock_read, mock_exists, mock_to_thread
     ):
-        """Test that pdfa module is called with correct arguments."""
+        """Test that OCRmyPDF is called with correct arguments."""
         from app.converter import convert_pdf_to_pdfa
 
         input_pdf = b"%PDF-1.4\ntest content"
@@ -134,13 +134,13 @@ class TestConvertPdfToPdfa:
 
         await convert_pdf_to_pdfa(input_pdf)
 
-        # Verify asyncio.to_thread was called with pdfa_convert function
+        # Verify asyncio.to_thread was called with ocrmypdf.ocr function
         assert mock_to_thread.called
         call_args = mock_to_thread.call_args
 
-        # Check that function arguments include expected parameters
+        # Check that function arguments include expected OCRmyPDF parameters
         assert "language" in call_args.kwargs or len(call_args.args) > 2
-        assert "pdfa_level" in call_args.kwargs or len(call_args.args) > 3
+        assert "output_type" in call_args.kwargs or len(call_args.args) > 3
 
     @pytest.mark.asyncio
     @patch("asyncio.to_thread", new_callable=AsyncMock)
@@ -173,7 +173,7 @@ class TestConvertPdfToPdfa:
 
         input_pdf = b"%PDF-1.4\ntest content"
 
-        error_message = "Critical error in pdfa conversion"
+        error_message = "Critical error in OCRmyPDF conversion"
         mock_to_thread.side_effect = Exception(error_message)
 
         with pytest.raises(RuntimeError) as exc_info:

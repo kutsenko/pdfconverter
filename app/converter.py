@@ -3,11 +3,42 @@ import logging
 import tempfile
 from pathlib import Path
 
+import ocrmypdf
+import pikepdf
+
 logger = logging.getLogger(__name__)
 
 
+def _is_pdf_tagged(pdf_path: Path) -> bool:
+    """Check if PDF is already tagged (has structural tags).
+
+    Tagged PDFs already have text layer and don't need OCR.
+
+    Args:
+        pdf_path: Path to PDF file
+
+    Returns:
+        True if PDF is tagged, False otherwise
+    """
+    try:
+        with pikepdf.open(pdf_path) as pdf:
+            # Check if PDF has StructTreeRoot (indicates tagged PDF)
+            if "/StructTreeRoot" in pdf.Root:
+                return True
+
+            # Alternative check: if any page has marked content
+            for page in pdf.pages:
+                if "/StructParents" in page:
+                    return True
+
+        return False
+    except Exception as e:
+        logger.warning("Failed to check PDF tags: %s", e)
+        return False
+
+
 async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -> bytes:
-    """Convert PDF to PDF/A format using pdfa Python module directly.
+    """Convert PDF to PDF/A format using OCRmyPDF directly.
 
     Args:
         pdf_bytes: Input PDF as bytes
@@ -32,9 +63,6 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
     logger.log(log_level, "Starting PDF conversion, size=%d bytes", len(pdf_bytes))
 
     try:
-        # Import pdfa module (done inside function to handle import errors gracefully)
-        from pdfa.converter import convert_to_pdfa as pdfa_convert
-
         # Create temporary directory for conversion
         with tempfile.TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.pdf"
@@ -43,19 +71,26 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
             # Write input PDF
             input_path.write_bytes(pdf_bytes)
 
-            logger.log(log_level, "Executing pdfa conversion via Python module")
+            # Check if PDF is already tagged (skip OCR if true)
+            skip_ocr = _is_pdf_tagged(input_path)
+            if skip_ocr:
+                logger.log(log_level, "PDF is tagged, skipping OCR")
+
+            logger.log(log_level, "Executing OCRmyPDF conversion")
 
             # Run conversion in thread pool to avoid blocking the event loop
-            # The pdfa.converter.convert_to_pdfa is a synchronous function
-            # Enable OCR but skip on tagged PDFs (default behavior)
+            # OCRmyPDF is a synchronous function
             await asyncio.to_thread(
-                pdfa_convert,
-                input_pdf=input_path,
-                output_pdf=output_path,
-                language="deu+eng",
-                pdfa_level="2",
-                ocr_enabled=True,
-                skip_ocr_on_tagged_pdfs=True,
+                ocrmypdf.ocr,
+                input_file=input_path,
+                output_file=output_path,
+                language="deu+eng",  # German + English
+                output_type="pdfa-2",  # PDF/A-2 standard
+                skip_text=skip_ocr,  # Skip OCR on tagged PDFs
+                optimize=0,  # No optimization (faster)
+                jobs=1,  # Single thread (sufficient for single-document API)
+                progress_bar=False,  # No progress bar (not needed in API)
+                use_threads=True,  # Enable threading within OCRmyPDF
             )
 
             # Check if output file was created
@@ -76,9 +111,6 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
 
             return output_bytes
 
-    except ImportError as e:
-        logger.error("Failed to import pdfa module: %s", e)
-        raise RuntimeError(f"pdfa module not available: {e}")
     except Exception as e:
         logger.error("Conversion failed: %s", e, exc_info=True)
         raise RuntimeError(f"PDF conversion failed: {str(e)}")

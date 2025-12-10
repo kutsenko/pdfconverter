@@ -71,8 +71,8 @@ class TestEndToEndWorkflow:
     @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_error_handling_workflow(self, mock_convert, client, valid_pdf):
         """Test error handling workflow through complete stack."""
-        # Arrange - Simulate conversion failure
-        mock_convert.side_effect = RuntimeError("Conversion failed")
+        # Arrange - Simulate conversion failure (RuntimeError → 422)
+        mock_convert.side_effect = RuntimeError("PDF conversion failed: OCR error")
 
         # Act - Attempt conversion
         response = client.post(
@@ -81,9 +81,9 @@ class TestEndToEndWorkflow:
             headers={"Content-Type": "application/pdf"},
         )
 
-        # Assert - Verify error response
-        assert response.status_code == 500
-        assert "Internal server error" in response.json()["detail"]
+        # Assert - Verify error response (422 for conversion errors)
+        assert response.status_code == 422
+        assert "conversion failed" in response.json()["detail"].lower()
 
 
 class TestMetricsIntegration:

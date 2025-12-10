@@ -1,30 +1,29 @@
-import sys
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mock_pdfa_module():
-    """Mock the pdfa module for all tests."""
-    # Create mock pdfa module
-    mock_pdfa = Mock()
-    mock_converter = Mock()
-    mock_convert_func = Mock()
+def mock_ocrmypdf():
+    """Mock OCRmyPDF for all tests."""
+    with patch("app.converter.ocrmypdf.ocr") as mock_ocr:
+        mock_ocr.return_value = None  # ocrmypdf.ocr returns nothing
+        yield mock_ocr
 
-    mock_converter.convert_to_pdfa = mock_convert_func
-    mock_pdfa.converter = mock_converter
 
-    # Add to sys.modules
-    sys.modules["pdfa"] = mock_pdfa
-    sys.modules["pdfa.converter"] = mock_converter
-
-    yield mock_convert_func
-
-    # Cleanup
-    sys.modules.pop("pdfa", None)
-    sys.modules.pop("pdfa.converter", None)
+@pytest.fixture(scope="session", autouse=True)
+def mock_pikepdf():
+    """Mock pikepdf for all tests."""
+    with patch("app.converter.pikepdf.open") as mock_open:
+        # Mock PDF object (not tagged by default)
+        mock_pdf = Mock()
+        mock_pdf.Root = {}  # No StructTreeRoot
+        mock_pdf.pages = []
+        mock_pdf.__enter__ = Mock(return_value=mock_pdf)
+        mock_pdf.__exit__ = Mock(return_value=None)
+        mock_open.return_value = mock_pdf
+        yield mock_open
 
 
 @pytest.fixture

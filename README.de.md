@@ -2,7 +2,7 @@
 
 FastAPI-basierte REST-Schnittstelle für die Konvertierung von PDF zu PDF/A Format.
 
-Basiert auf dem Docker Image `kutsenko/pdfa-service:latest-minimal` und nutzt das pdfa Python-Modul für optimale Performance.
+Nutzt OCRmyPDF für direkte PDF zu PDF/A Konvertierung mit OCR-Unterstützung.
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688.svg)](https://fastapi.tiangolo.com)
@@ -269,8 +269,9 @@ else:
 ### Architektur
 
 - **Framework:** FastAPI 0.109.0
-- **Base Image:** kutsenko/pdfa-service:latest-minimal
-- **Conversion:** pdfa Python module (via asyncio.to_thread)
+- **Base Image:** python:3.12-slim
+- **Conversion:** OCRmyPDF (via asyncio.to_thread)
+- **OCR Engine:** Tesseract 5.x (Deutsch + Englisch)
 - **Metriken:** prometheus-client
 - **Port:** 8080
 
@@ -343,7 +344,9 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-**Hinweis:** Die Tests nutzen Mocks für das pdfa-Modul und können ohne Docker-Container ausgeführt werden.
+**Hinweis:** Für lokale Entwicklung müssen System-Dependencies installiert werden:
+- **Ubuntu/Debian:** `apt-get install tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng ghostscript qpdf pngquant unpaper`
+- **macOS:** `brew install tesseract tesseract-lang ghostscript qpdf pngquant unpaper`
 
 ### Projektstruktur
 
@@ -694,11 +697,8 @@ docker-compose up --scale pdfconverter=3
 
 ## Referenzen
 
-- [pdfa-service GitHub](https://github.com/kutsenko/pdfa-service)
+- [OCRmyPDF Documentation](https://ocrmypdf.readthedocs.io/)
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
+- [pikepdf Documentation](https://pikepdf.readthedocs.io/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Prometheus Client Python](https://github.com/prometheus/client_python)
-- [OCRmyPDF Documentation](https://ocrmypdf.readthedocs.io/)
-
-## Lizenz
-
-Dieses Projekt nutzt das `kutsenko/pdfa-service` Base Image. Bitte beachten Sie die Lizenzbedingungen des Base Images.

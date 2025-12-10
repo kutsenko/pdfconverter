@@ -1,4 +1,3 @@
-import subprocess
 from unittest.mock import AsyncMock, patch
 
 from app.main import CONVERTER_PATH, HEALTH_PATH, METRICS_PATH
@@ -120,9 +119,7 @@ class TestPdfConverterEndpoint:
     @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_conversion_failure(self, mock_convert, client, valid_pdf):
         """Test that conversion failure returns 422."""
-        mock_convert.side_effect = subprocess.CalledProcessError(
-            returncode=1, cmd=["pdfa-cli"], output="", stderr="Conversion failed"
-        )
+        mock_convert.side_effect = RuntimeError("PDF conversion failed: OCR error")
 
         response = client.post(
             CONVERTER_PATH,
@@ -240,7 +237,8 @@ class TestErrorHandling:
     @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_500_on_unexpected_error(self, mock_convert, client, valid_pdf):
         """Test that unexpected errors return 500."""
-        mock_convert.side_effect = RuntimeError("Unexpected error")
+        # Use Exception (not RuntimeError) for unexpected errors
+        mock_convert.side_effect = Exception("Unexpected error")
 
         response = client.post(
             CONVERTER_PATH,

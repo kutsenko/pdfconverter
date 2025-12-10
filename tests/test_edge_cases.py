@@ -4,7 +4,6 @@ Edge case tests for PDF Converter Service.
 These tests cover uncommon scenarios and boundary conditions to improve coverage.
 """
 
-import subprocess
 from unittest.mock import AsyncMock, patch
 
 from app.main import CONVERTER_PATH, HEALTH_PATH
@@ -216,10 +215,8 @@ class TestErrorResponseFormats:
     @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_422_error_has_detail(self, mock_convert, client, valid_pdf):
         """Test that 422 errors include detail field."""
-        # Arrange - Simulate subprocess error
-        mock_convert.side_effect = subprocess.CalledProcessError(
-            returncode=1, cmd=["pdfa-cli"], stderr="Error"
-        )
+        # Arrange - Simulate conversion error (OCRmyPDF raises RuntimeError)
+        mock_convert.side_effect = RuntimeError("PDF conversion failed: OCR error")
 
         # Act
         response = client.post(
@@ -236,8 +233,8 @@ class TestErrorResponseFormats:
     @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_500_error_has_detail(self, mock_convert, client, valid_pdf):
         """Test that 500 errors include detail field."""
-        # Arrange - Simulate unexpected error
-        mock_convert.side_effect = RuntimeError("Unexpected error")
+        # Arrange - Simulate unexpected error (not RuntimeError)
+        mock_convert.side_effect = Exception("Unexpected error")
 
         # Act
         response = client.post(
@@ -368,9 +365,26 @@ class TestConversionErrorTypes:
 
     @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
     def test_runtime_error_from_converter(self, mock_convert, client, valid_pdf):
-        """Test RuntimeError from converter returns 500."""
-        # Arrange
-        mock_convert.side_effect = RuntimeError("Conversion engine failure")
+        """Test RuntimeError from converter returns 422."""
+        # Arrange - OCRmyPDF raises RuntimeError for conversion failures
+        mock_convert.side_effect = RuntimeError("PDF conversion failed: OCR engine failure")
+
+        # Act
+        response = client.post(
+            CONVERTER_PATH,
+            content=valid_pdf,
+            headers={"Content-Type": "application/pdf"},
+        )
+
+        # Assert
+        assert response.status_code == 422
+        assert "conversion failed" in response.json()["detail"].lower()
+
+    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
+    def test_unexpected_error_from_converter(self, mock_convert, client, valid_pdf):
+        """Test unexpected error (non-RuntimeError) from converter returns 500."""
+        # Arrange - Other exceptions should return 500
+        mock_convert.side_effect = Exception("Unexpected system error")
 
         # Act
         response = client.post(
@@ -382,24 +396,6 @@ class TestConversionErrorTypes:
         # Assert
         assert response.status_code == 500
         assert "Internal server error" in response.json()["detail"]
-
-    @patch("app.main.convert_pdf_to_pdfa", new_callable=AsyncMock)
-    def test_subprocess_error_from_converter(self, mock_convert, client, valid_pdf):
-        """Test subprocess.CalledProcessError from converter returns 422."""
-        # Arrange
-        mock_convert.side_effect = subprocess.CalledProcessError(
-            returncode=2, cmd=["pdfa-cli"], stderr="Invalid input"
-        )
-
-        # Act
-        response = client.post(
-            CONVERTER_PATH,
-            content=valid_pdf,
-            headers={"Content-Type": "application/pdf"},
-        )
-
-        # Assert
-        assert response.status_code == 422
 
 
 class TestResponseSizeHandling:

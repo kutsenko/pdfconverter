@@ -3,3 +3,7 @@ uvicorn[standard]==0.34.2
 prometheus-client==0.21.0
 python-multipart==0.0.18
 starlette==0.50.0
+
+# PDF/A Conversion
+ocrmypdf==16.5.0
+pikepdf==9.4.2
