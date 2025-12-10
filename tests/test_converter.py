@@ -469,9 +469,7 @@ class TestOptimizationByPdfType:
 
         # Assert - Check that PDF type was logged
         log_calls = mock_logger.log.call_args_list
-        pdf_type_logged = any(
-            "text_only" in str(call) for call in log_calls
-        )
+        pdf_type_logged = any("text_only" in str(call) for call in log_calls)
         assert pdf_type_logged
 
     @pytest.mark.asyncio
