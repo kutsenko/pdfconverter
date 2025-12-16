@@ -26,6 +26,17 @@ services:
       - METRICS_PATH=${METRICS_PATH:-/metrics}
       - CONVERTER_PATH=${CONVERTER_PATH:-/api/pdfconverter}
 
+      # Performance & Concurrency Configuration
+      - OCR_MAX_WORKERS=${OCR_MAX_WORKERS:-8}        # Max concurrent PDF conversions
+      - OCRMYPDF_JOBS=${OCRMYPDF_JOBS:-4}            # Parallel processing per PDF
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-4}        # Uvicorn worker processes
+
+      # PDF Optimization Configuration
+      - PDF_TEXT_OPTIMIZE=${PDF_TEXT_OPTIMIZE:-1}
+      - PDF_SCANNED_OPTIMIZE=${PDF_SCANNED_OPTIMIZE:-1}
+      - PDF_MIXED_OPTIMIZE=${PDF_MIXED_OPTIMIZE:-1}
+      - PDF_UNKNOWN_OPTIMIZE=${PDF_UNKNOWN_OPTIMIZE:-0}
+
       # Optional Configuration (uncomment and set as needed)
       # - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # - TZ=${TZ:-UTC}
@@ -41,15 +52,15 @@ services:
       start_period: 10s
 
     # Resource Limits
-    # Verhindert dass der Container zu viel Ressourcen verbraucht
+    # Angepasst für hohe Parallelisierung (4 workers × 8 concurrent = 32 parallel conversions)
     deploy:
       resources:
         limits:
-          cpus: '2.0'      # Maximal 2 CPU Cores
-          memory: 2G       # Maximal 2GB RAM
+          cpus: '4.0'      # Maximal 4 CPU Cores (für jobs=4)
+          memory: 4G       # Maximal 4GB RAM (4 workers × 8 concurrent × ~100MB)
         reservations:
-          cpus: '0.5'      # Mindestens 0.5 CPU Cores
-          memory: 512M     # Mindestens 512MB RAM
+          cpus: '2.0'      # Mindestens 2 CPU Cores
+          memory: 2G       # Mindestens 2GB RAM
 
     # Restart Policy
     # Container wird automatisch neu gestartet bei Fehler

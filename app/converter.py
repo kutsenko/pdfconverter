@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
 
@@ -8,8 +9,15 @@ import ocrmypdf
 import pikepdf
 
 from .converter_config import get_optimizer_config
+from .metrics import ACTIVE_CONVERSIONS
 
 logger = logging.getLogger(__name__)
+
+# Bounded Thread Pool (reuses threads, limits concurrency)
+_config = get_optimizer_config()
+_executor = ThreadPoolExecutor(
+    max_workers=_config.max_workers, thread_name_prefix="ocr-worker"
+)
 
 
 class PdfType(Enum):
@@ -163,6 +171,10 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
     log_level = logging.DEBUG if is_health_check else logging.INFO
     logger.log(log_level, "Starting PDF conversion, size=%d bytes", len(pdf_bytes))
 
+    # Track active conversions (skip for health checks to avoid metric noise)
+    if not is_health_check:
+        ACTIVE_CONVERSIONS.inc()
+
     try:
         # Create temporary directory for conversion
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -199,19 +211,22 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
 
             logger.log(log_level, "Executing OCRmyPDF conversion")
 
-            # Run conversion in thread pool to avoid blocking the event loop
+            # Run conversion in bounded thread pool to avoid blocking the event loop
             # OCRmyPDF is a synchronous function
-            await asyncio.to_thread(
-                ocrmypdf.ocr,
-                input_file=input_path,
-                output_file=output_path,
-                language="deu+eng",  # German + English
-                output_type="pdfa-2",  # PDF/A-2 standard
-                skip_text=skip_ocr,  # Skip OCR on tagged PDFs
-                optimize=optimize_level,  # Dynamic optimization based on PDF type
-                jobs=1,  # Single thread (sufficient for single-document API)
-                progress_bar=False,  # No progress bar (not needed in API)
-                use_threads=True,  # Enable threading within OCRmyPDF
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                _executor,
+                lambda: ocrmypdf.ocr(
+                    input_file=input_path,
+                    output_file=output_path,
+                    language="deu+eng",  # German + English
+                    output_type="pdfa-2",  # PDF/A-2 standard
+                    skip_text=skip_ocr,  # Skip OCR on tagged PDFs
+                    optimize=optimize_level,  # Dynamic optimization based on PDF type
+                    jobs=_config.ocrmypdf_jobs,  # Parallel page processing
+                    progress_bar=False,  # No progress bar (not needed in API)
+                    use_threads=True,  # Enable threading within OCRmyPDF
+                ),
             )
 
             # Check if output file was created
@@ -241,3 +256,7 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
     except Exception as e:
         logger.error("Conversion failed: %s", e, exc_info=True)
         raise RuntimeError(f"PDF conversion failed: {str(e)}")
+    finally:
+        # Decrement active conversions counter (skip for health checks)
+        if not is_health_check:
+            ACTIVE_CONVERSIONS.dec()

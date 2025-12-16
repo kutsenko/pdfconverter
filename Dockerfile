@@ -31,5 +31,5 @@ COPY app/ /app/app/
 # Expose port
 EXPOSE 8080
 
-# Start FastAPI application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Start FastAPI application with multiple workers
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers ${UVICORN_WORKERS:-4} --timeout-keep-alive 75"]

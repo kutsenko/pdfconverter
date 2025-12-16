@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +24,21 @@ def mock_pikepdf():
         mock_pdf.__exit__ = Mock(return_value=None)
         mock_open.return_value = mock_pdf
         yield mock_open
+
+
+@pytest.fixture(autouse=True)
+def mock_event_loop():
+    """Mock asyncio event loop for all tests."""
+    # Create a mock async function for backwards compatibility with old tests
+    async_mock_func = AsyncMock(return_value=None)
+
+    # Patch both the new (run_in_executor) and old (to_thread) patterns
+    with patch("asyncio.get_event_loop") as mock_get_loop, \
+         patch("asyncio.to_thread", async_mock_func):
+        mock_loop = Mock()
+        mock_loop.run_in_executor = AsyncMock(return_value=None)
+        mock_get_loop.return_value = mock_loop
+        yield mock_loop
 
 
 @pytest.fixture

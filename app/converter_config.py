@@ -13,6 +13,10 @@ class OptimizerConfig:
     mixed_optimize: int = 1
     unknown_optimize: int = 0
 
+    # Threading configuration
+    max_workers: int = 8
+    ocrmypdf_jobs: int = 4
+
     @classmethod
     def from_environment(cls) -> "OptimizerConfig":
         """Load configuration from environment variables."""
@@ -21,6 +25,8 @@ class OptimizerConfig:
             scanned_optimize=int(os.getenv("PDF_SCANNED_OPTIMIZE", "1")),
             mixed_optimize=int(os.getenv("PDF_MIXED_OPTIMIZE", "1")),
             unknown_optimize=int(os.getenv("PDF_UNKNOWN_OPTIMIZE", "0")),
+            max_workers=int(os.getenv("OCR_MAX_WORKERS", "8")),
+            ocrmypdf_jobs=int(os.getenv("OCRMYPDF_JOBS", "4")),
         )
 
 

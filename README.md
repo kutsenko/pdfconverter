@@ -39,7 +39,7 @@ Uses OCRmyPDF for direct PDF to PDF/A conversion with OCR support.
 - 🏥 **Health Check Support:** Dedicated header (`X-Health-Check`) for monitoring
 - 📝 **Structured Logging:** DEBUG for health checks, INFO for regular requests
 - 🐳 **Docker-Ready:** Fully containerized with Docker support
-- ✅ **Production-Ready:** 88% test coverage (139 tests), comprehensive error handling
+- ✅ **Production-Ready:** 88% test coverage (147+ tests), comprehensive error handling
 
 ## Quick Start
 
@@ -216,11 +216,12 @@ else:
 
 ### Architecture
 
-- **Framework:** FastAPI 0.109.0
+- **Framework:** FastAPI 0.109.0 with multiple Uvicorn workers
 - **Base Image:** python:3.12-slim
-- **Conversion:** OCRmyPDF (via asyncio.to_thread)
+- **Conversion:** OCRmyPDF (via bounded ThreadPoolExecutor)
 - **OCR Engine:** Tesseract 5.x (German + English)
-- **Metrics:** prometheus-client
+- **Concurrency:** ThreadPoolExecutor with configurable max_workers
+- **Metrics:** prometheus-client with active conversion tracking
 - **Port:** 8080
 
 ### Configuration
@@ -270,6 +271,37 @@ docker run -p 8080:8080 \
   pdfconverter
 ```
 
+**Performance & Concurrency Configuration:**
+
+The service is optimized for high-throughput concurrent processing:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OCR_MAX_WORKERS` | `8` | Max concurrent PDF conversions (bounded ThreadPoolExecutor) |
+| `OCRMYPDF_JOBS` | `4` | Parallel page processing within each conversion |
+| `UVICORN_WORKERS` | `4` | Number of Uvicorn worker processes |
+
+**Throughput Expectations:**
+- **Single request:** ~0.5-1.2s per PDF (depending on size/complexity)
+- **Concurrent (8 parallel):** 4-8 PDFs/second
+- **Multi-page PDFs:** 2-4x faster with jobs=4
+
+**Resource Requirements:**
+- **Recommended:** 4+ CPU cores
+- **Memory:** 4GB minimum for high concurrency (4 workers × 8 concurrent × ~100MB)
+
+**Example with custom concurrency:**
+
+```bash
+docker run -p 8080:8080 \
+  -e OCR_MAX_WORKERS=8 \
+  -e OCRMYPDF_JOBS=4 \
+  -e UVICORN_WORKERS=4 \
+  pdfconverter
+```
+
+**Monitoring:** Track active conversions with `pdf_active_conversions` Prometheus metric.
+
 ### Logging
 
 Logging distinguishes between regular requests and health checks:
@@ -285,6 +317,14 @@ Logging distinguishes between regular requests and health checks:
 ### Prometheus Metrics
 
 Metrics are only recorded for non-health-check requests.
+
+**Available Metrics:**
+- `pdf_conversions_total`: Total number of conversions (by status)
+- `pdf_conversion_duration_seconds`: Conversion duration histogram
+- `pdf_input_size_bytes`: Input PDF size histogram
+- `pdf_output_size_bytes`: Output PDF size histogram
+- `pdf_conversion_errors_total`: Total conversion errors (by type)
+- `pdf_active_conversions`: **NEW** - Current number of active conversions (Gauge)
 
 **Histogram Buckets:**
 - Duration: 0.1s to 120s

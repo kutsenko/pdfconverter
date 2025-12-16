@@ -1,4 +1,9 @@
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
+
+# Gauge for active conversions
+ACTIVE_CONVERSIONS = Gauge(
+    "pdf_active_conversions", "Number of currently active PDF conversions"
+)
 
 # Counter for total conversions
 REQUEST_COUNT = Counter(
