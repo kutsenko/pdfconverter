@@ -33,8 +33,10 @@ def mock_event_loop():
     async_mock_func = AsyncMock(return_value=None)
 
     # Patch both the new (run_in_executor) and old (to_thread) patterns
-    with patch("asyncio.get_event_loop") as mock_get_loop, \
-         patch("asyncio.to_thread", async_mock_func):
+    with (
+        patch("asyncio.get_event_loop") as mock_get_loop,
+        patch("asyncio.to_thread", async_mock_func),
+    ):
         mock_loop = Mock()
         mock_loop.run_in_executor = AsyncMock(return_value=None)
         mock_get_loop.return_value = mock_loop

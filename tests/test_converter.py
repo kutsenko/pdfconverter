@@ -117,9 +117,7 @@ class TestConvertPdfToPdfa:
     @pytest.mark.asyncio
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
-    async def test_ocrmypdf_call_structure(
-        self, mock_read, mock_exists
-    ):
+    async def test_ocrmypdf_call_structure(self, mock_read, mock_exists):
         """Test that OCRmyPDF conversion completes successfully."""
         from app.converter import convert_pdf_to_pdfa
 
