@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "FastAPI-based REST service for PDF to PDF/A conversion"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {text = "AGPL-3.0-or-later"}
 authors = [
     {name = "PDF Converter Contributors"}
 ]
