@@ -2,19 +2,19 @@ import asyncio
 import logging
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
 import ocrmypdf
 import pikepdf
 
-from .converter_config import get_optimizer_config
+from .converter_config import _config
 from .metrics import ACTIVE_CONVERSIONS
 
 logger = logging.getLogger(__name__)
 
 # Bounded Thread Pool (reuses threads, limits concurrency)
-_config = get_optimizer_config()
 _executor = ThreadPoolExecutor(
     max_workers=_config.max_workers, thread_name_prefix="ocr-worker"
 )
@@ -27,6 +27,14 @@ class PdfType(Enum):
     SCANNED_IMAGE = "scanned_image"
     MIXED_CONTENT = "mixed_content"
     UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class PdfAnalysis:
+    """Result of PDF analysis (type + tagged status)."""
+
+    pdf_type: PdfType
+    is_tagged: bool
 
 
 def _is_pdf_tagged(pdf_path: Path) -> bool:
@@ -146,6 +154,20 @@ def _detect_pdf_type(pdf_path: Path) -> PdfType:
         return PdfType.UNKNOWN
 
 
+def _analyze_pdf(pdf_path: Path) -> PdfAnalysis:
+    """Analyze PDF in a single pass: detect type and tagged status.
+
+    Args:
+        pdf_path: Path to PDF file
+
+    Returns:
+        PdfAnalysis with pdf_type and is_tagged
+    """
+    pdf_type = _detect_pdf_type(pdf_path)
+    is_tagged = _is_pdf_tagged(pdf_path)
+    return PdfAnalysis(pdf_type=pdf_type, is_tagged=is_tagged)
+
+
 async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -> bytes:
     """Convert PDF to PDF/A format using OCRmyPDF directly.
 
@@ -184,22 +206,20 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
             # Write input PDF
             input_path.write_bytes(pdf_bytes)
 
-            # Detect PDF type for optimization strategy
-            pdf_type = _detect_pdf_type(input_path)
+            # Analyze PDF: detect type and tagged status
+            analysis = _analyze_pdf(input_path)
+            pdf_type = analysis.pdf_type
+            skip_ocr = analysis.is_tagged
             logger.log(log_level, "Detected PDF type: %s", pdf_type.value)
-
-            # Check if PDF is already tagged (skip OCR if true)
-            skip_ocr = _is_pdf_tagged(input_path)
             if skip_ocr:
                 logger.log(log_level, "PDF is tagged, skipping OCR")
 
             # Get optimization level based on PDF type
-            config = get_optimizer_config()
             optimize_level = {
-                PdfType.TEXT_ONLY: config.text_only_optimize,
-                PdfType.SCANNED_IMAGE: config.scanned_optimize,
-                PdfType.MIXED_CONTENT: config.mixed_optimize,
-                PdfType.UNKNOWN: config.unknown_optimize,
+                PdfType.TEXT_ONLY: _config.text_only_optimize,
+                PdfType.SCANNED_IMAGE: _config.scanned_optimize,
+                PdfType.MIXED_CONTENT: _config.mixed_optimize,
+                PdfType.UNKNOWN: _config.unknown_optimize,
             }[pdf_type]
 
             logger.log(
@@ -217,9 +237,9 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
             await loop.run_in_executor(
                 _executor,
                 lambda: ocrmypdf.ocr(
-                    input_file=input_path,
-                    output_file=output_path,
-                    language="deu+eng",  # German + English
+                    input_path,
+                    output_path,
+                    language=["deu", "eng"],  # German + English
                     output_type="pdfa-2",  # PDF/A-2 standard
                     skip_text=skip_ocr,  # Skip OCR on tagged PDFs
                     optimize=optimize_level,  # Dynamic optimization based on PDF type
@@ -253,9 +273,11 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
 
             return output_bytes
 
+    except (ValueError, RuntimeError):
+        raise
     except Exception as e:
         logger.error("Conversion failed: %s", e, exc_info=True)
-        raise RuntimeError(f"PDF conversion failed: {str(e)}")
+        raise RuntimeError(f"PDF conversion failed: {str(e)}") from e
     finally:
         # Decrement active conversions counter (skip for health checks)
         if not is_health_check:

@@ -17,17 +17,54 @@ class OptimizerConfig:
     max_workers: int = 8
     ocrmypdf_jobs: int = 4
 
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        for field in (
+            "text_only_optimize",
+            "scanned_optimize",
+            "mixed_optimize",
+            "unknown_optimize",
+        ):
+            value = getattr(self, field)
+            if not 0 <= value <= 3:
+                raise ValueError(f"{field} must be between 0 and 3, got {value}")
+
+        if self.max_workers < 1:
+            raise ValueError(f"max_workers must be >= 1, got {self.max_workers}")
+        if self.ocrmypdf_jobs < 1:
+            raise ValueError(f"ocrmypdf_jobs must be >= 1, got {self.ocrmypdf_jobs}")
+
     @classmethod
     def from_environment(cls) -> "OptimizerConfig":
         """Load configuration from environment variables."""
-        return cls(
-            text_only_optimize=int(os.getenv("PDF_TEXT_OPTIMIZE", "1")),
-            scanned_optimize=int(os.getenv("PDF_SCANNED_OPTIMIZE", "1")),
-            mixed_optimize=int(os.getenv("PDF_MIXED_OPTIMIZE", "1")),
-            unknown_optimize=int(os.getenv("PDF_UNKNOWN_OPTIMIZE", "0")),
-            max_workers=int(os.getenv("OCR_MAX_WORKERS", "8")),
-            ocrmypdf_jobs=int(os.getenv("OCRMYPDF_JOBS", "4")),
-        )
+        env_mapping = {
+            "text_only_optimize": "PDF_TEXT_OPTIMIZE",
+            "scanned_optimize": "PDF_SCANNED_OPTIMIZE",
+            "mixed_optimize": "PDF_MIXED_OPTIMIZE",
+            "unknown_optimize": "PDF_UNKNOWN_OPTIMIZE",
+            "max_workers": "OCR_MAX_WORKERS",
+            "ocrmypdf_jobs": "OCRMYPDF_JOBS",
+        }
+        defaults = {
+            "text_only_optimize": "1",
+            "scanned_optimize": "1",
+            "mixed_optimize": "1",
+            "unknown_optimize": "0",
+            "max_workers": "8",
+            "ocrmypdf_jobs": "4",
+        }
+
+        kwargs = {}
+        for field, env_var in env_mapping.items():
+            raw = os.getenv(env_var, defaults[field])
+            try:
+                kwargs[field] = int(raw)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"Invalid value for {env_var}: {raw!r} (must be an integer)"
+                ) from e
+
+        return cls(**kwargs)
 
 
 _config = OptimizerConfig.from_environment()

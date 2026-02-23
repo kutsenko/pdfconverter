@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import make_asgi_app
@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-MAX_PDF_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", str(50 * 1024 * 1024)))
 MINIMAL_PDF = (
     b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj "
     b"2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj xref\n0 3\n"
@@ -57,7 +57,9 @@ def is_health_check(request: Request) -> bool:
 
 
 @app.middleware("http")
-async def metrics_middleware(request: Request, call_next) -> Any:
+async def metrics_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Middleware to collect Prometheus metrics.
 
     Only records metrics for non-health-check requests.
@@ -237,9 +239,9 @@ app.mount(METRICS_PATH, metrics_app)
 
 # Log configured paths
 logger.info("Configured endpoints:")
-logger.info(f"  Health Check: {HEALTH_PATH}")
-logger.info(f"  PDF Converter: {CONVERTER_PATH}")
-logger.info(f"  Metrics: {METRICS_PATH}")
+logger.info("  Health Check: %s", HEALTH_PATH)
+logger.info("  PDF Converter: %s", CONVERTER_PATH)
+logger.info("  Metrics: %s", METRICS_PATH)
 
 
 if __name__ == "__main__":
