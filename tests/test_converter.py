@@ -26,9 +26,7 @@ class TestConvertPdfToPdfa:
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     @patch("pathlib.Path.write_bytes")
-    async def test_successful_conversion(
-        self, mock_write, mock_read, mock_exists
-    ):
+    async def test_successful_conversion(self, mock_write, mock_read, mock_exists):
         """Test successful PDF conversion."""
         from app.converter import convert_pdf_to_pdfa
 
@@ -56,9 +54,7 @@ class TestConvertPdfToPdfa:
 
     @pytest.mark.asyncio
     @patch("pathlib.Path.exists")
-    async def test_output_file_not_created_raises_error(
-        self, mock_exists
-    ):
+    async def test_output_file_not_created_raises_error(self, mock_exists):
         """Test that missing output file raises RuntimeError."""
         from app.converter import convert_pdf_to_pdfa
 
@@ -72,9 +68,7 @@ class TestConvertPdfToPdfa:
     @pytest.mark.asyncio
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
-    async def test_empty_output_file_raises_error(
-        self, mock_read, mock_exists
-    ):
+    async def test_empty_output_file_raises_error(self, mock_read, mock_exists):
         """Test that empty output file raises RuntimeError."""
         from app.converter import convert_pdf_to_pdfa
 
@@ -125,9 +119,7 @@ class TestConvertPdfToPdfa:
     @pytest.mark.asyncio
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
-    async def test_temporary_files_cleanup(
-        self, mock_read, mock_exists
-    ):
+    async def test_temporary_files_cleanup(self, mock_read, mock_exists):
         """Test that temporary files are cleaned up after conversion."""
         from app.converter import convert_pdf_to_pdfa
 
@@ -144,7 +136,10 @@ class TestConvertPdfToPdfa:
         # tempfile.TemporaryDirectory should handle cleanup automatically
 
     @pytest.mark.asyncio
-    @patch("app.converter.ocrmypdf.ocr", side_effect=Exception("Critical error in OCRmyPDF conversion"))
+    @patch(
+        "app.converter.ocrmypdf.ocr",
+        side_effect=Exception("Critical error in OCRmyPDF conversion"),
+    )
     async def test_error_output_on_failure(self, mock_ocr):
         """Test that errors are captured on conversion failure."""
         from app.converter import convert_pdf_to_pdfa
@@ -189,9 +184,7 @@ class TestConverterLogging:
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     @patch("app.converter.logger")
-    async def test_logging_for_health_check(
-        self, mock_logger, mock_read, mock_exists
-    ):
+    async def test_logging_for_health_check(self, mock_logger, mock_read, mock_exists):
         """Test that DEBUG level is used for health checks."""
         import logging
 
@@ -295,7 +288,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\ntext content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.TEXT_ONLY, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -319,7 +314,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\nscanned content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.SCANNED_IMAGE, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.SCANNED_IMAGE, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -342,7 +339,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\nmixed content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.MIXED_CONTENT, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.MIXED_CONTENT, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -366,7 +365,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\nunknown content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.UNKNOWN, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -397,7 +398,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\ntest content"
         output_pdf = b"%PDF-1.4\nconverted"
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.TEXT_ONLY, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -429,7 +432,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\ntest content"
         output_pdf = b"%PDF-1.4\nconverted"
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.TEXT_ONLY, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -462,7 +467,9 @@ class TestOptimizationByPdfType:
         input_pdf = b"%PDF-1.4\ntest content" * 100  # Larger input
         output_pdf = b"%PDF-1.4\nsmaller"  # Smaller output
 
-        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
+        mock_analyze.return_value = PdfAnalysis(
+            pdf_type=PdfType.TEXT_ONLY, is_tagged=False
+        )
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 

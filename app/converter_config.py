@@ -27,18 +27,12 @@ class OptimizerConfig:
         ):
             value = getattr(self, field)
             if not 0 <= value <= 3:
-                raise ValueError(
-                    f"{field} must be between 0 and 3, got {value}"
-                )
+                raise ValueError(f"{field} must be between 0 and 3, got {value}")
 
         if self.max_workers < 1:
-            raise ValueError(
-                f"max_workers must be >= 1, got {self.max_workers}"
-            )
+            raise ValueError(f"max_workers must be >= 1, got {self.max_workers}")
         if self.ocrmypdf_jobs < 1:
-            raise ValueError(
-                f"ocrmypdf_jobs must be >= 1, got {self.ocrmypdf_jobs}"
-            )
+            raise ValueError(f"ocrmypdf_jobs must be >= 1, got {self.ocrmypdf_jobs}")
 
     @classmethod
     def from_environment(cls) -> "OptimizerConfig":

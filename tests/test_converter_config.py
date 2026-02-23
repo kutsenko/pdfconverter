@@ -33,22 +33,28 @@ class TestOptimizerConfigDefaults:
 class TestOptimizerConfigValidation:
     """Tests for OptimizerConfig __post_init__ validation."""
 
-    @pytest.mark.parametrize("field", [
-        "text_only_optimize",
-        "scanned_optimize",
-        "mixed_optimize",
-        "unknown_optimize",
-    ])
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "text_only_optimize",
+            "scanned_optimize",
+            "mixed_optimize",
+            "unknown_optimize",
+        ],
+    )
     def test_optimize_level_too_high(self, field):
         with pytest.raises(ValueError, match="must be between 0 and 3"):
             OptimizerConfig(**{field: 4})
 
-    @pytest.mark.parametrize("field", [
-        "text_only_optimize",
-        "scanned_optimize",
-        "mixed_optimize",
-        "unknown_optimize",
-    ])
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "text_only_optimize",
+            "scanned_optimize",
+            "mixed_optimize",
+            "unknown_optimize",
+        ],
+    )
     def test_optimize_level_negative(self, field):
         with pytest.raises(ValueError, match="must be between 0 and 3"):
             OptimizerConfig(**{field: -1})

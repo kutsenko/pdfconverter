@@ -57,7 +57,9 @@ def is_health_check(request: Request) -> bool:
 
 
 @app.middleware("http")
-async def metrics_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+async def metrics_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Middleware to collect Prometheus metrics.
 
     Only records metrics for non-health-check requests.
