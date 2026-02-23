@@ -1,9 +1,9 @@
-fastapi==0.124.0
-uvicorn[standard]==0.34.2
-prometheus-client==0.21.0
-python-multipart==0.0.18
-starlette==0.50.0
+fastapi==0.131.0
+uvicorn[standard]==0.41.0
+prometheus-client==0.24.1
+python-multipart==0.0.22
+starlette==0.52.1
 
 # PDF/A Conversion
-ocrmypdf==16.5.0
-pikepdf==9.4.2
+ocrmypdf==17.3.0
+pikepdf==10.3.0

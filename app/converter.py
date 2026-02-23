@@ -213,7 +213,7 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
 
             # Run conversion in bounded thread pool to avoid blocking the event loop
             # OCRmyPDF is a synchronous function
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 _executor,
                 lambda: ocrmypdf.ocr(
