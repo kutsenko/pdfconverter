@@ -237,9 +237,9 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
             await loop.run_in_executor(
                 _executor,
                 lambda: ocrmypdf.ocr(
-                    input_file=input_path,
-                    output_file=output_path,
-                    language="deu+eng",  # German + English
+                    input_path,
+                    output_path,
+                    language=["deu", "eng"],  # German + English
                     output_type="pdfa-2",  # PDF/A-2 standard
                     skip_text=skip_ocr,  # Skip OCR on tagged PDFs
                     optimize=optimize_level,  # Dynamic optimization based on PDF type
