@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import make_asgi_app
