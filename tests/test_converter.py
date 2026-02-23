@@ -282,22 +282,20 @@ class TestOptimizationByPdfType:
     """Tests for optimization level selection based on PDF type."""
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     async def test_text_only_pdf_uses_optimize_1(
-        self, mock_read, mock_exists, mock_tagged, mock_detect
+        self, mock_read, mock_exists, mock_analyze
     ):
         """Verify text-only PDFs use optimization level 1."""
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\ntext content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_detect.return_value = PdfType.TEXT_ONLY
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -308,22 +306,20 @@ class TestOptimizationByPdfType:
         assert result == output_pdf
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     async def test_scanned_pdf_uses_optimize_1(
-        self, mock_read, mock_exists, mock_tagged, mock_detect
+        self, mock_read, mock_exists, mock_analyze
     ):
         """Verify scanned PDFs use optimization level 1 (conservative)."""
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\nscanned content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_detect.return_value = PdfType.SCANNED_IMAGE
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.SCANNED_IMAGE, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -333,22 +329,20 @@ class TestOptimizationByPdfType:
         # Assert
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     async def test_mixed_pdf_uses_optimize_1(
-        self, mock_read, mock_exists, mock_tagged, mock_detect
+        self, mock_read, mock_exists, mock_analyze
     ):
         """Verify mixed content PDFs use optimization level 1."""
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\nmixed content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_detect.return_value = PdfType.MIXED_CONTENT
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.MIXED_CONTENT, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -359,22 +353,20 @@ class TestOptimizationByPdfType:
         assert result == output_pdf
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     async def test_unknown_pdf_uses_optimize_0(
-        self, mock_read, mock_exists, mock_tagged, mock_detect
+        self, mock_read, mock_exists, mock_analyze
     ):
         """Verify unknown PDFs fall back to optimization level 0 (safe)."""
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\nunknown content"
         output_pdf = b"%PDF-1.4\nconverted content"
 
-        mock_detect.return_value = PdfType.UNKNOWN
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -386,8 +378,7 @@ class TestOptimizationByPdfType:
         assert result == output_pdf
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     @patch("app.converter.logger")
@@ -396,19 +387,17 @@ class TestOptimizationByPdfType:
         mock_logger,
         mock_read,
         mock_exists,
-        mock_tagged,
-        mock_detect,
+        mock_analyze,
     ):
         """Verify that detected PDF type is logged."""
 
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\ntest content"
         output_pdf = b"%PDF-1.4\nconverted"
 
-        mock_detect.return_value = PdfType.TEXT_ONLY
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -421,8 +410,7 @@ class TestOptimizationByPdfType:
         assert pdf_type_logged
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     @patch("app.converter.logger")
@@ -431,19 +419,17 @@ class TestOptimizationByPdfType:
         mock_logger,
         mock_read,
         mock_exists,
-        mock_tagged,
-        mock_detect,
+        mock_analyze,
     ):
         """Verify that optimization level is logged."""
 
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\ntest content"
         output_pdf = b"%PDF-1.4\nconverted"
 
-        mock_detect.return_value = PdfType.TEXT_ONLY
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
@@ -458,8 +444,7 @@ class TestOptimizationByPdfType:
         assert optimization_logged
 
     @pytest.mark.asyncio
-    @patch("app.converter._detect_pdf_type")
-    @patch("app.converter._is_pdf_tagged")
+    @patch("app.converter._analyze_pdf")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_bytes")
     @patch("app.converter.logger")
@@ -468,18 +453,16 @@ class TestOptimizationByPdfType:
         mock_logger,
         mock_read,
         mock_exists,
-        mock_tagged,
-        mock_detect,
+        mock_analyze,
     ):
         """Verify that size change (bytes and percentage) is logged."""
-        from app.converter import PdfType, convert_pdf_to_pdfa
+        from app.converter import PdfAnalysis, PdfType, convert_pdf_to_pdfa
 
         # Arrange
         input_pdf = b"%PDF-1.4\ntest content" * 100  # Larger input
         output_pdf = b"%PDF-1.4\nsmaller"  # Smaller output
 
-        mock_detect.return_value = PdfType.TEXT_ONLY
-        mock_tagged.return_value = False
+        mock_analyze.return_value = PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
         mock_exists.return_value = True
         mock_read.return_value = output_pdf
 
