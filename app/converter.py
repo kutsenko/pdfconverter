@@ -157,19 +157,154 @@ def _detect_pdf_type(pdf_path: Path) -> PdfType:
 def _analyze_pdf(pdf_path: Path) -> PdfAnalysis:
     """Analyze PDF in a single pass: detect type and tagged status.
 
+    Opens the PDF once with pikepdf and extracts all needed information
+    (tagged status, image counts, full-page detection) in one traversal.
+
     Args:
         pdf_path: Path to PDF file
 
     Returns:
         PdfAnalysis with pdf_type and is_tagged
     """
-    pdf_type = _detect_pdf_type(pdf_path)
-    is_tagged = _is_pdf_tagged(pdf_path)
-    return PdfAnalysis(pdf_type=pdf_type, is_tagged=is_tagged)
+    try:
+        with pikepdf.open(pdf_path) as pdf:
+            # Check tagged status
+            is_tagged = "/StructTreeRoot" in pdf.Root
+            if not is_tagged:
+                for page in pdf.pages:
+                    if "/StructParents" in page:
+                        is_tagged = True
+                        break
+
+            # Count images and full-page images in one pass
+            num_pages = len(pdf.pages)
+            if num_pages == 0:
+                return PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=is_tagged)
+
+            image_count = 0
+            full_page_count = 0
+            for page in pdf.pages:
+                if "/Resources" not in page or "/XObject" not in page.Resources:
+                    continue
+                xobjects = page.Resources.XObject
+                page_image_count = 0
+                for obj_name in xobjects:  # type: ignore[attr-defined]
+                    xobject = xobjects[obj_name]
+                    if "/Subtype" in xobject and xobject.Subtype == "/Image":
+                        image_count += 1
+                        page_image_count += 1
+                if page_image_count == 1:
+                    full_page_count += 1
+
+            # Classify PDF type
+            if image_count == 0:
+                pdf_type = PdfType.TEXT_ONLY
+            elif (full_page_count / num_pages) > 0.8:
+                pdf_type = PdfType.SCANNED_IMAGE
+            else:
+                pdf_type = PdfType.MIXED_CONTENT
+
+            return PdfAnalysis(pdf_type=pdf_type, is_tagged=is_tagged)
+    except Exception as e:
+        logger.warning("PDF analysis failed: %s", e)
+        return PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=False)
+
+
+def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
+    """Run the entire conversion pipeline synchronously.
+
+    Designed to run in a thread pool executor so the async event loop
+    stays free for new requests. Handles file I/O, PDF analysis,
+    OCRmyPDF conversion, and result reading in one call.
+
+    Args:
+        pdf_bytes: Input PDF as bytes
+        log_level: Logging level (DEBUG for health checks, INFO otherwise)
+
+    Returns:
+        Converted PDF/A as bytes
+
+    Raises:
+        RuntimeError: If conversion fails
+    """
+    input_size = len(pdf_bytes)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = Path(tmpdir) / "input.pdf"
+        output_path = Path(tmpdir) / "output.pdf"
+
+        # Write input PDF and release buffer
+        input_path.write_bytes(pdf_bytes)
+        del pdf_bytes
+
+        # Analyze PDF: detect type and tagged status (single pikepdf open)
+        analysis = _analyze_pdf(input_path)
+        pdf_type = analysis.pdf_type
+        skip_ocr = analysis.is_tagged
+        logger.log(log_level, "Detected PDF type: %s", pdf_type.value)
+        if skip_ocr:
+            logger.log(log_level, "PDF is tagged, skipping OCR")
+
+        # Get optimization level based on PDF type
+        optimize_level = {
+            PdfType.TEXT_ONLY: _config.text_only_optimize,
+            PdfType.SCANNED_IMAGE: _config.scanned_optimize,
+            PdfType.MIXED_CONTENT: _config.mixed_optimize,
+            PdfType.UNKNOWN: _config.unknown_optimize,
+        }[pdf_type]
+
+        logger.log(
+            log_level,
+            "Using optimization level %d for %s PDF",
+            optimize_level,
+            pdf_type.value,
+        )
+
+        logger.log(log_level, "Executing OCRmyPDF conversion")
+
+        ocrmypdf.ocr(
+            input_path,
+            output_path,
+            language=["deu", "eng"],  # German + English
+            output_type="pdfa-2",  # PDF/A-2 standard
+            skip_text=skip_ocr,  # Skip OCR on tagged PDFs
+            optimize=optimize_level,  # Dynamic optimization based on PDF type
+            jobs=_config.ocrmypdf_jobs,  # Parallel page processing
+            progress_bar=False,  # No progress bar (not needed in API)
+            use_threads=True,  # Enable threading within OCRmyPDF
+        )
+
+        # Check if output file was created
+        if not output_path.exists():
+            raise RuntimeError("Conversion failed: output file not created")
+
+        # Read output PDF
+        output_bytes = output_path.read_bytes()
+
+        if not output_bytes:
+            raise RuntimeError("Conversion failed: output file is empty")
+
+        # Calculate and log size change
+        size_change = len(output_bytes) - input_size
+        size_change_pct = (size_change / input_size) * 100
+
+        logger.log(
+            log_level,
+            "Conversion completed, output=%d bytes (change: %+d bytes, %+.1f%%)",
+            len(output_bytes),
+            size_change,
+            size_change_pct,
+        )
+
+        return output_bytes
 
 
 async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -> bytes:
     """Convert PDF to PDF/A format using OCRmyPDF directly.
+
+    Validates input, then offloads the entire synchronous pipeline
+    (file I/O, PDF analysis, OCRmyPDF conversion) to a thread pool
+    executor so the async event loop stays free.
 
     Args:
         pdf_bytes: Input PDF as bytes
@@ -198,81 +333,12 @@ async def convert_pdf_to_pdfa(pdf_bytes: bytes, is_health_check: bool = False) -
         ACTIVE_CONVERSIONS.inc()
 
     try:
-        # Create temporary directory for conversion
-        with tempfile.TemporaryDirectory() as tmpdir:
-            input_path = Path(tmpdir) / "input.pdf"
-            output_path = Path(tmpdir) / "output.pdf"
-
-            # Write input PDF
-            input_path.write_bytes(pdf_bytes)
-
-            # Analyze PDF: detect type and tagged status
-            analysis = _analyze_pdf(input_path)
-            pdf_type = analysis.pdf_type
-            skip_ocr = analysis.is_tagged
-            logger.log(log_level, "Detected PDF type: %s", pdf_type.value)
-            if skip_ocr:
-                logger.log(log_level, "PDF is tagged, skipping OCR")
-
-            # Get optimization level based on PDF type
-            optimize_level = {
-                PdfType.TEXT_ONLY: _config.text_only_optimize,
-                PdfType.SCANNED_IMAGE: _config.scanned_optimize,
-                PdfType.MIXED_CONTENT: _config.mixed_optimize,
-                PdfType.UNKNOWN: _config.unknown_optimize,
-            }[pdf_type]
-
-            logger.log(
-                log_level,
-                "Using optimization level %d for %s PDF",
-                optimize_level,
-                pdf_type.value,
-            )
-
-            logger.log(log_level, "Executing OCRmyPDF conversion")
-
-            # Run conversion in bounded thread pool to avoid blocking the event loop
-            # OCRmyPDF is a synchronous function
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                _executor,
-                lambda: ocrmypdf.ocr(
-                    input_path,
-                    output_path,
-                    language=["deu", "eng"],  # German + English
-                    output_type="pdfa-2",  # PDF/A-2 standard
-                    skip_text=skip_ocr,  # Skip OCR on tagged PDFs
-                    optimize=optimize_level,  # Dynamic optimization based on PDF type
-                    jobs=_config.ocrmypdf_jobs,  # Parallel page processing
-                    progress_bar=False,  # No progress bar (not needed in API)
-                    use_threads=True,  # Enable threading within OCRmyPDF
-                ),
-            )
-
-            # Check if output file was created
-            if not output_path.exists():
-                raise RuntimeError("Conversion failed: output file not created")
-
-            # Read output PDF
-            output_bytes = output_path.read_bytes()
-
-            if not output_bytes:
-                raise RuntimeError("Conversion failed: output file is empty")
-
-            # Calculate and log size change
-            size_change = len(output_bytes) - len(pdf_bytes)
-            size_change_pct = (size_change / len(pdf_bytes)) * 100
-
-            logger.log(
-                log_level,
-                "Conversion completed, output=%d bytes (change: %+d bytes, %+.1f%%)",
-                len(output_bytes),
-                size_change,
-                size_change_pct,
-            )
-
-            return output_bytes
-
+        # Run entire conversion pipeline in thread pool
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _executor,
+            lambda: _convert_sync(pdf_bytes, log_level),
+        )
     except (ValueError, RuntimeError):
         raise
     except Exception as e:

@@ -64,13 +64,9 @@ services:
     # Container wird automatisch neu gestartet bei Fehler
     restart: unless-stopped
 
-    # Optionale Volume Mounts
-    # Auskommentiert - aktivieren falls benötigt
-    # volumes:
-    #   # Persistente Logs
-    #   - ./logs:/app/logs
-    #   # Temporäre Dateien (für bessere Performance)
-    #   - /tmp/pdfconverter:/tmp
+    # RAM-basiertes tmpfs für temporäre Konvertierungsdateien (schneller als Disk-I/O)
+    tmpfs:
+      - /tmp:size=512M
 
     # Netzwerk-Konfiguration
     networks:

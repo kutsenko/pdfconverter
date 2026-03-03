@@ -4,7 +4,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from app.converter import (
+    PdfAnalysis,
     PdfType,
+    _analyze_pdf,
     _count_pdf_images,
     _detect_pdf_type,
     _is_full_page_image_pdf,
@@ -493,3 +495,116 @@ class TestPdfTypeDetection:
 
         # Assert
         assert pdf_type == PdfType.MIXED_CONTENT
+
+
+class TestAnalyzePdfSinglePass:
+    """Tests for _analyze_pdf single-pass analysis."""
+
+    @patch("app.converter.pikepdf.open")
+    def test_opens_pdf_only_once(self, mock_open):
+        """Verify pikepdf.open is called exactly once (single-pass)."""
+        mock_pdf = Mock()
+        mock_pdf.Root = {}
+        mock_pdf.pages = []
+        mock_pdf.__enter__ = Mock(return_value=mock_pdf)
+        mock_pdf.__exit__ = Mock(return_value=None)
+        mock_open.return_value = mock_pdf
+
+        _analyze_pdf(Path("/tmp/test.pdf"))
+
+        mock_open.assert_called_once()
+
+    @patch("app.converter.pikepdf.open")
+    def test_text_only_not_tagged(self, mock_open):
+        """Test text-only PDF without tags."""
+        mock_pdf = Mock()
+        mock_pdf.Root = {}  # No StructTreeRoot
+
+        mock_page = Mock()
+        mock_page.__contains__ = Mock(return_value=False)  # No Resources
+        mock_pdf.pages = [mock_page]
+
+        mock_pdf.__enter__ = Mock(return_value=mock_pdf)
+        mock_pdf.__exit__ = Mock(return_value=None)
+        mock_open.return_value = mock_pdf
+
+        result = _analyze_pdf(Path("/tmp/test.pdf"))
+
+        assert result == PdfAnalysis(pdf_type=PdfType.TEXT_ONLY, is_tagged=False)
+
+    @patch("app.converter.pikepdf.open")
+    def test_tagged_pdf_detected(self, mock_open):
+        """Test that tagged PDFs are correctly identified."""
+        mock_pdf = Mock()
+        mock_pdf.Root = {"/StructTreeRoot": Mock()}
+
+        mock_page = Mock()
+        mock_page.__contains__ = Mock(return_value=False)
+        mock_pdf.pages = [mock_page]
+
+        mock_pdf.__enter__ = Mock(return_value=mock_pdf)
+        mock_pdf.__exit__ = Mock(return_value=None)
+        mock_open.return_value = mock_pdf
+
+        result = _analyze_pdf(Path("/tmp/test.pdf"))
+
+        assert result.is_tagged is True
+        assert result.pdf_type == PdfType.TEXT_ONLY
+
+    @patch("app.converter.pikepdf.open")
+    def test_scanned_image_detected(self, mock_open):
+        """Test scanned PDF (>80% single-image pages) detected in single pass."""
+        mock_pdf = Mock()
+        mock_pdf.Root = {}
+
+        # 5 pages, each with exactly 1 image → 100% > 80%
+        pages = []
+        for _ in range(5):
+            page = Mock()
+            img = Mock()
+            img.__contains__ = Mock(return_value=True)
+            img.Subtype = "/Image"
+
+            xobjects = Mock()
+            xobjects.__iter__ = Mock(return_value=iter(["/Im0"]))
+            xobjects.__getitem__ = Mock(return_value=img)
+
+            resources = Mock()
+            resources.XObject = xobjects
+            resources.__contains__ = Mock(return_value=True)
+
+            page.__contains__ = Mock(side_effect=lambda x: x == "/Resources")
+            page.Resources = resources
+            pages.append(page)
+
+        mock_pdf.pages = pages
+        mock_pdf.__enter__ = Mock(return_value=mock_pdf)
+        mock_pdf.__exit__ = Mock(return_value=None)
+        mock_open.return_value = mock_pdf
+
+        result = _analyze_pdf(Path("/tmp/test.pdf"))
+
+        assert result.pdf_type == PdfType.SCANNED_IMAGE
+
+    @patch("app.converter.pikepdf.open")
+    def test_error_returns_unknown(self, mock_open):
+        """Test that errors result in UNKNOWN type and not tagged."""
+        mock_open.side_effect = Exception("PDF open failed")
+
+        result = _analyze_pdf(Path("/tmp/test.pdf"))
+
+        assert result == PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=False)
+
+    @patch("app.converter.pikepdf.open")
+    def test_empty_pdf_returns_unknown(self, mock_open):
+        """Test that empty PDF (no pages) returns UNKNOWN."""
+        mock_pdf = Mock()
+        mock_pdf.Root = {}
+        mock_pdf.pages = []
+        mock_pdf.__enter__ = Mock(return_value=mock_pdf)
+        mock_pdf.__exit__ = Mock(return_value=None)
+        mock_open.return_value = mock_pdf
+
+        result = _analyze_pdf(Path("/tmp/test.pdf"))
+
+        assert result.pdf_type == PdfType.UNKNOWN
