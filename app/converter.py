@@ -210,6 +210,27 @@ def _analyze_pdf(pdf_path: Path) -> PdfAnalysis:
         return PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=False)
 
 
+def _downgrade_to_pdfa1b(pdf_path: Path) -> None:
+    """Downgrade a PDF/A-2 file to PDF/A-1b in place.
+
+    Removes PDF/A-2 only features (transparency groups), sets PDF version
+    to 1.4, and updates XMP metadata to declare PDF/A-1b conformance.
+
+    Args:
+        pdf_path: Path to PDF/A-2 file (modified in place)
+    """
+    with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+        for page in pdf.pages:
+            if "/Group" in page:
+                del page["/Group"]
+
+        with pdf.open_metadata() as meta:
+            meta["pdfaid:part"] = "1"
+            meta["pdfaid:conformance"] = "B"
+
+        pdf.save(pdf_path, min_version="1.4", force_version="1.4")
+
+
 def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
     """Run the entire conversion pipeline synchronously.
 
@@ -262,6 +283,9 @@ def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
 
         logger.log(log_level, "Executing OCRmyPDF conversion")
 
+        # Always convert via PDF/A-2 first (Ghostscript rasterizes pages
+        # into huge bitmaps when targeting PDF/A-1 directly, causing massive
+        # file size inflation and slow conversion times)
         ocrmypdf.ocr(
             input_path,
             output_path,
@@ -277,6 +301,11 @@ def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
         # Check if output file was created
         if not output_path.exists():
             raise RuntimeError("Conversion failed: output file not created")
+
+        # Downgrade to PDF/A-1b if requested
+        if _config.pdfa_version == 1:
+            logger.log(log_level, "Downgrading to PDF/A-1b")
+            _downgrade_to_pdfa1b(output_path)
 
         # Read output PDF
         output_bytes = output_path.read_bytes()

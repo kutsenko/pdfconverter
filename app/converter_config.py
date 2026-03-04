@@ -17,6 +17,9 @@ class OptimizerConfig:
     max_workers: int = 8
     ocrmypdf_jobs: int = 4
 
+    # PDF/A version: 1 for PDF/A-1b, 2 for PDF/A-2b
+    pdfa_version: int = 2
+
     def __post_init__(self) -> None:
         """Validate configuration values."""
         for field in (
@@ -33,6 +36,10 @@ class OptimizerConfig:
             raise ValueError(f"max_workers must be >= 1, got {self.max_workers}")
         if self.ocrmypdf_jobs < 1:
             raise ValueError(f"ocrmypdf_jobs must be >= 1, got {self.ocrmypdf_jobs}")
+        if self.pdfa_version not in (1, 2):
+            raise ValueError(
+                f"pdfa_version must be 1 or 2, got {self.pdfa_version}"
+            )
 
     @classmethod
     def from_environment(cls) -> "OptimizerConfig":
@@ -44,6 +51,7 @@ class OptimizerConfig:
             "unknown_optimize": "PDF_UNKNOWN_OPTIMIZE",
             "max_workers": "OCR_MAX_WORKERS",
             "ocrmypdf_jobs": "OCRMYPDF_JOBS",
+            "pdfa_version": "PDFA_VERSION",
         }
         defaults = {
             "text_only_optimize": "1",
@@ -52,6 +60,7 @@ class OptimizerConfig:
             "unknown_optimize": "0",
             "max_workers": "8",
             "ocrmypdf_jobs": "4",
+            "pdfa_version": "2",
         }
 
         kwargs = {}
