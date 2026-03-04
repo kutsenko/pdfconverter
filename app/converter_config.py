@@ -37,9 +37,7 @@ class OptimizerConfig:
         if self.ocrmypdf_jobs < 1:
             raise ValueError(f"ocrmypdf_jobs must be >= 1, got {self.ocrmypdf_jobs}")
         if self.pdfa_version not in (1, 2):
-            raise ValueError(
-                f"pdfa_version must be 1 or 2, got {self.pdfa_version}"
-            )
+            raise ValueError(f"pdfa_version must be 1 or 2, got {self.pdfa_version}")
 
     @classmethod
     def from_environment(cls) -> "OptimizerConfig":
