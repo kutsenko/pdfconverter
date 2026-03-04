@@ -222,7 +222,7 @@ def _downgrade_to_pdfa1b(pdf_path: Path) -> None:
     with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
         for page in pdf.pages:
             if "/Group" in page:
-                del page["/Group"]
+                del page["/Group"]  # type: ignore[operator]
 
         with pdf.open_metadata() as meta:
             meta["pdfaid:part"] = "1"
