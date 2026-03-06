@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -210,19 +211,111 @@ def _analyze_pdf(pdf_path: Path) -> PdfAnalysis:
         return PdfAnalysis(pdf_type=PdfType.UNKNOWN, is_tagged=False)
 
 
+_PDF14_MAX_REAL = 32767.0
+_REAL_PATTERN = re.compile(r"(?<![a-zA-Z/])(-?\d+\.?\d*)")
+
+
+def _clamp_real(match: re.Match[str]) -> str:
+    """Clamp a real number to PDF 1.4 limits."""
+    val = float(match.group(0))
+    if val > _PDF14_MAX_REAL:
+        return str(_PDF14_MAX_REAL)
+    if val < -_PDF14_MAX_REAL:
+        return str(-_PDF14_MAX_REAL)
+    return match.group(0)
+
+
+def _clamp_content_stream(pdf: pikepdf.Pdf, page: pikepdf.Page) -> None:
+    """Clamp real values in a page's content stream to PDF 1.4 limits.
+
+    PDF 1.4 (required for PDF/A-1) restricts real values to [-32767, 32767].
+    Ghostscript may produce coordinates outside this range during conversion.
+
+    Args:
+        pdf: The owning PDF (needed to create replacement streams)
+        page: The page whose content stream to clamp
+    """
+    contents = page.get("/Contents")
+    if contents is None:
+        return
+
+    data = contents.read_bytes().decode("latin-1")
+    new_data = _REAL_PATTERN.sub(_clamp_real, data)
+    if new_data != data:
+        page.Contents = pdf.make_stream(new_data.encode("latin-1"))
+
+
+def _sanitize_pdfa(pdf_path: Path) -> None:
+    """Fix common PDF/A compliance issues left by Ghostscript.
+
+    Ghostscript may leave CMYK transparency groups on pages even after
+    color conversion to RGB. These cause veraPDF validation failures
+    for both PDF/A-1b and PDF/A-2b. This function removes them.
+
+    Args:
+        pdf_path: Path to PDF file (modified in place)
+    """
+    with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+        modified = False
+        for page in pdf.pages:
+            if "/Group" not in page:
+                continue
+            group = page.Group
+            if "/CS" in group and str(group.CS) == "/DeviceCMYK":
+                del page["/Group"]  # type: ignore[operator]
+                modified = True
+        if modified:
+            pdf.save(pdf_path)
+
+
 def _downgrade_to_pdfa1b(pdf_path: Path) -> None:
     """Downgrade a PDF/A-2 file to PDF/A-1b in place.
 
-    Removes PDF/A-2 only features (transparency groups), sets PDF version
-    to 1.4, and updates XMP metadata to declare PDF/A-1b conformance.
+    Applies all changes needed for PDF/A-1b conformance:
+    - Removes transparency groups (not allowed in PDF/A-1)
+    - Removes SMask entries from XObjects (soft masks not in PDF/A-1)
+    - Adds CIDSet streams to CIDFont descriptors (required by PDF/A-1)
+    - Clamps real values in content streams to PDF 1.4 limit (32767)
+    - Sets PDF version to 1.4 and updates XMP metadata
 
     Args:
         pdf_path: Path to PDF/A-2 file (modified in place)
     """
     with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
         for page in pdf.pages:
+            # Remove all transparency groups (not just CMYK ones)
             if "/Group" in page:
                 del page["/Group"]  # type: ignore[operator]
+
+            # Clamp out-of-range real values in content stream
+            # PDF 1.4 limits real values to [-32767, 32767]
+            _clamp_content_stream(pdf, page)
+
+            if "/Resources" not in page:
+                continue
+            resources = page.Resources
+
+            # Remove SMask from XObjects (soft masks not allowed in PDF/A-1)
+            if "/XObject" in resources:
+                xobjects = resources.XObject
+                for name in xobjects:  # type: ignore[attr-defined]
+                    xobj = xobjects[name]
+                    if "/SMask" in xobj:
+                        del xobj["/SMask"]
+
+            # Add CIDSet to CIDFont descriptors (required by PDF/A-1)
+            if "/Font" in resources:
+                fonts = resources.Font
+                for fname in fonts:  # type: ignore[attr-defined]
+                    font = fonts[fname]
+                    if "/DescendantFonts" not in font:
+                        continue
+                    for desc_font in font.DescendantFonts:  # type: ignore[attr-defined]
+                        fd = desc_font.get("/FontDescriptor")
+                        if fd and "/CIDSet" not in fd and "/FontFile2" in fd:
+                            # Mark all CIDs as present (conservative but valid)
+                            cidset_data = b"\xff" * 8192
+                            fd["/CIDSet"] = pdf.make_stream(cidset_data)
 
         with pdf.open_metadata() as meta:
             meta["pdfaid:part"] = "1"
@@ -296,11 +389,15 @@ def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
             jobs=_config.ocrmypdf_jobs,  # Parallel page processing
             progress_bar=False,  # No progress bar (not needed in API)
             use_threads=True,  # Enable threading within OCRmyPDF
+            color_conversion_strategy="RGB",  # Ensure PDF/A color compliance
         )
 
         # Check if output file was created
         if not output_path.exists():
             raise RuntimeError("Conversion failed: output file not created")
+
+        # Fix common PDF/A compliance issues (e.g. CMYK transparency groups)
+        _sanitize_pdfa(output_path)
 
         # Downgrade to PDF/A-1b if requested
         if _config.pdfa_version == 1:
