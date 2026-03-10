@@ -248,9 +248,8 @@ def _clamp_content_stream(pdf: pikepdf.Pdf, page: pikepdf.Page) -> None:
 def _sanitize_pdfa(pdf_path: Path) -> None:
     """Fix common PDF/A compliance issues left by Ghostscript.
 
-    Ghostscript may leave CMYK transparency groups on pages even after
-    color conversion to RGB. These cause veraPDF validation failures
-    for both PDF/A-1b and PDF/A-2b. This function removes them.
+    - Removes CMYK transparency groups (invalid without CMYK output intent)
+    - Removes annotations without appearance dictionaries (required by PDF/A)
 
     Args:
         pdf_path: Path to PDF file (modified in place)
@@ -258,12 +257,24 @@ def _sanitize_pdfa(pdf_path: Path) -> None:
     with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
         modified = False
         for page in pdf.pages:
-            if "/Group" not in page:
-                continue
-            group = page.Group
-            if "/CS" in group and str(group.CS) == "/DeviceCMYK":
-                del page["/Group"]  # type: ignore[operator]
-                modified = True
+            # Remove CMYK transparency groups
+            if "/Group" in page:
+                group = page.Group
+                if "/CS" in group and str(group.CS) == "/DeviceCMYK":
+                    del page["/Group"]  # type: ignore[operator]
+                    modified = True
+
+            # Remove annotations without appearance dictionaries
+            if "/Annots" in page:
+                annots = list(page.Annots)  # type: ignore[call-overload]
+                clean = [a for a in annots if "/AP" in a]
+                if len(clean) < len(annots):
+                    modified = True
+                    if clean:
+                        page["/Annots"] = pikepdf.Array(clean)
+                    else:
+                        del page["/Annots"]  # type: ignore[operator]
+
         if modified:
             pdf.save(pdf_path)
 
@@ -274,6 +285,7 @@ def _downgrade_to_pdfa1b(pdf_path: Path) -> None:
     Applies all changes needed for PDF/A-1b conformance:
     - Removes transparency groups (not allowed in PDF/A-1)
     - Removes SMask entries from XObjects (soft masks not in PDF/A-1)
+    - Forces alpha values to 1.0 in ExtGState (transparency not in PDF/A-1)
     - Adds CIDSet streams to CIDFont descriptors (required by PDF/A-1)
     - Clamps real values in content streams to PDF 1.4 limit (32767)
     - Sets PDF version to 1.4 and updates XMP metadata
@@ -303,11 +315,35 @@ def _downgrade_to_pdfa1b(pdf_path: Path) -> None:
                     if "/SMask" in xobj:
                         del xobj["/SMask"]
 
-            # Add CIDSet to CIDFont descriptors (required by PDF/A-1)
+            # Force alpha values to 1.0 (transparency not allowed in PDF/A-1)
+            if "/ExtGState" in resources:
+                ext_gstates = resources.ExtGState
+                for gsname in ext_gstates:  # type: ignore[attr-defined]
+                    gs = ext_gstates[gsname]
+                    if "/ca" in gs:
+                        gs["/ca"] = pikepdf.Object.parse(b"1.0")
+                    if "/CA" in gs:
+                        gs["/CA"] = pikepdf.Object.parse(b"1.0")
+
+            # Process fonts
             if "/Font" in resources:
                 fonts = resources.Font
                 for fname in fonts:  # type: ignore[attr-defined]
                     font = fonts[fname]
+
+                    # Clamp Type 3 font CharProcs (glyph content streams)
+                    if "/CharProcs" in font:
+                        charprocs = font.CharProcs
+                        for cpname in charprocs:  # type: ignore[attr-defined]
+                            stream = charprocs[cpname]
+                            data = stream.read_bytes().decode("latin-1")
+                            new_data = _REAL_PATTERN.sub(_clamp_real, data)
+                            if new_data != data:
+                                charprocs[cpname] = pdf.make_stream(
+                                    new_data.encode("latin-1")
+                                )
+
+                    # Add CIDSet to CIDFont descriptors (required by PDF/A-1)
                     if "/DescendantFonts" not in font:
                         continue
                     for desc_font in font.DescendantFonts:  # type: ignore[attr-defined]
@@ -355,10 +391,9 @@ def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
         # Analyze PDF: detect type and tagged status (single pikepdf open)
         analysis = _analyze_pdf(input_path)
         pdf_type = analysis.pdf_type
-        skip_ocr = analysis.is_tagged
         logger.log(log_level, "Detected PDF type: %s", pdf_type.value)
-        if skip_ocr:
-            logger.log(log_level, "PDF is tagged, skipping OCR")
+        if analysis.is_tagged:
+            logger.log(log_level, "PDF is tagged")
 
         # Get optimization level based on PDF type
         optimize_level = {
@@ -385,7 +420,7 @@ def _convert_sync(pdf_bytes: bytes, log_level: int) -> bytes:
             output_path,
             language=["deu", "eng"],  # German + English
             output_type="pdfa-2",  # PDF/A-2 standard
-            skip_text=skip_ocr,  # Skip OCR on tagged PDFs
+            skip_text=True,  # Skip pages that already have text
             optimize=optimize_level,  # Dynamic optimization based on PDF type
             jobs=_config.ocrmypdf_jobs,  # Parallel page processing
             progress_bar=False,  # No progress bar (not needed in API)
