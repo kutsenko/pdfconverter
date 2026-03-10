@@ -312,7 +312,8 @@ def _downgrade_to_pdfa1b(pdf_path: Path) -> None:
                         continue
                     for desc_font in font.DescendantFonts:  # type: ignore[attr-defined]
                         fd = desc_font.get("/FontDescriptor")
-                        if fd and "/CIDSet" not in fd and "/FontFile2" in fd:
+                        has_font = "/FontFile2" in fd or "/FontFile3" in fd
+                        if fd and "/CIDSet" not in fd and has_font:
                             # Mark all CIDs as present (conservative but valid)
                             cidset_data = b"\xff" * 8192
                             fd["/CIDSet"] = pdf.make_stream(cidset_data)
