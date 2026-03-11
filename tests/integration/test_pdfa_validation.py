@@ -32,7 +32,7 @@ UNCONVERTIBLE_PDFS = {"unreadable_metadata.pdf"}
 
 # PDFs with unfixable veraPDF issues (e.g. font glyph width mismatches
 # embedded in the source PDF that can't be corrected without re-embedding)
-VERAPDF_KNOWN_ISSUES = {"Classic_Game_Programming_on_the_NES.pdf"}
+VERAPDF_KNOWN_ISSUES: set[str] = set()
 
 # All test PDFs that should be convertible
 CONVERTIBLE_TEST_PDFS = sorted(

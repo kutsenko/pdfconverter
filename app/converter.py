@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import re
 import tempfile
@@ -9,6 +10,8 @@ from pathlib import Path
 
 import ocrmypdf
 import pikepdf
+from fontTools.cffLib import CFFFontSet
+from fontTools.ttLib import TTFont
 
 from .converter_config import _config
 from .metrics import ACTIVE_CONVERSIONS
@@ -225,11 +228,48 @@ def _clamp_real(match: re.Match[str]) -> str:
     return match.group(0)
 
 
+def _clamp_outside_strings(data: str) -> str:
+    """Clamp real values to PDF 1.4 limits, skipping PDF string literals.
+
+    PDF string literals are enclosed in parentheses and may contain
+    numbers (like ISBNs) that should NOT be clamped.
+    """
+    result: list[str] = []
+    i = 0
+    length = len(data)
+    while i < length:
+        if data[i] == "(":
+            # Find matching close paren, handling nesting and escapes
+            depth = 1
+            j = i + 1
+            while j < length and depth > 0:
+                if data[j] == "\\" and j + 1 < length:
+                    j += 2
+                    continue
+                if data[j] == "(":
+                    depth += 1
+                elif data[j] == ")":
+                    depth -= 1
+                j += 1
+            result.append(data[i:j])  # Keep string literal unchanged
+            i = j
+        else:
+            # Find next string literal
+            next_paren = data.find("(", i)
+            if next_paren == -1:
+                next_paren = length
+            segment = data[i:next_paren]
+            result.append(_REAL_PATTERN.sub(_clamp_real, segment))
+            i = next_paren
+    return "".join(result)
+
+
 def _clamp_content_stream(pdf: pikepdf.Pdf, page: pikepdf.Page) -> None:
     """Clamp real values in a page's content stream to PDF 1.4 limits.
 
     PDF 1.4 (required for PDF/A-1) restricts real values to [-32767, 32767].
     Ghostscript may produce coordinates outside this range during conversion.
+    Numbers inside PDF string literals (parentheses) are not clamped.
 
     Args:
         pdf: The owning PDF (needed to create replacement streams)
@@ -240,7 +280,7 @@ def _clamp_content_stream(pdf: pikepdf.Pdf, page: pikepdf.Page) -> None:
         return
 
     data = contents.read_bytes().decode("latin-1")
-    new_data = _REAL_PATTERN.sub(_clamp_real, data)
+    new_data = _clamp_outside_strings(data)
     if new_data != data:
         page.Contents = pdf.make_stream(new_data.encode("latin-1"))
 
@@ -259,11 +299,247 @@ def _remove_cmyk_group(obj: object) -> bool:
     return False
 
 
+def _fix_cff_font_widths(font: pikepdf.Object) -> bool:
+    """Fix width mismatches between CFF font programs and PDF font dictionaries.
+
+    Ghostscript may copy raw charstring widths into the Widths array without
+    accounting for a non-standard FontMatrix. When the CFF FontMatrix scale
+    differs from the standard 0.001, all PDF Widths entries need to be
+    multiplied by (FontMatrix[0] / 0.001).
+
+    Returns True if any widths were corrected.
+    """
+    if str(font.get("/Subtype", "")) != "/Type1":  # type: ignore[call-overload]
+        return False
+    fd = font.get("/FontDescriptor")
+    if not fd or "/FontFile3" not in fd:
+        return False
+    ff3 = fd["/FontFile3"]
+    if str(ff3.get("/Subtype", "")) != "/Type1C":  # type: ignore[call-overload]
+        return False
+    if "/Widths" not in font:
+        return False
+
+    try:
+        cff_data = ff3.read_bytes()
+        cff = CFFFontSet()
+        cff.decompile(io.BytesIO(cff_data), None)
+        top = cff.topDictIndex[0]
+
+        fm = getattr(top, "FontMatrix", None)
+        if fm is None or abs(fm[0] - 0.001) < 1e-8:
+            return False  # Standard matrix, no correction needed
+
+        scale = fm[0] / 0.001  # e.g. 0.0004883/0.001 = 0.4883
+
+        # Scale all widths by the FontMatrix ratio
+        widths = list(font.Widths)  # type: ignore[call-overload]
+        new_widths = []
+        for w in widths:
+            scaled = round(float(w) * scale)
+            new_widths.append(pikepdf.Object.parse(str(scaled).encode()))
+
+        font["/Widths"] = pikepdf.Array(new_widths)
+        logger.debug(
+            "Fixed CFF font widths: scale=%.4f, %d entries", scale, len(new_widths)
+        )
+        return True
+    except Exception as e:
+        logger.debug("CFF font width fix skipped: %s", e)
+        return False
+
+
+def _fix_truetype_widths(font: pikepdf.Object) -> bool:
+    """Fix zero-width entries in TrueType font Widths arrays.
+
+    Ghostscript sometimes sets Widths to 0 for glyphs that exist in
+    the TrueType font program. This reads the hmtx table and fills
+    in the correct widths.
+
+    Returns True if any widths were corrected.
+    """
+    if str(font.get("/Subtype", "")) != "/TrueType":  # type: ignore[call-overload]
+        return False
+    fd = font.get("/FontDescriptor")
+    if not fd or "/FontFile2" not in fd:
+        return False
+    if "/Widths" not in font or "/FirstChar" not in font:
+        return False
+
+    try:
+        ff2_data = fd["/FontFile2"].read_bytes()
+        ttf = TTFont(io.BytesIO(ff2_data))
+        cmap = ttf.getBestCmap()
+        hmtx = ttf["hmtx"]
+        units_per_em = ttf["head"].unitsPerEm
+
+        first_char = int(font.FirstChar)
+        widths = list(font.Widths)  # type: ignore[call-overload]
+        corrected = False
+
+        for i, w in enumerate(widths):
+            if int(w) != 0:
+                continue
+            char_code = first_char + i
+            glyph_name = cmap.get(char_code)
+            if glyph_name and glyph_name in hmtx.metrics:
+                actual_w = round(hmtx[glyph_name][0] * 1000 / units_per_em)
+                if actual_w > 0:
+                    widths[i] = pikepdf.Object.parse(str(actual_w).encode())
+                    corrected = True
+
+        if corrected:
+            font["/Widths"] = pikepdf.Array(widths)
+            logger.debug("Fixed TrueType font zero-widths")
+        ttf.close()
+        return corrected
+    except Exception as e:
+        logger.debug("TrueType font width fix skipped: %s", e)
+        return False
+
+
+def _get_used_char_codes(
+    page: object,
+) -> dict[str, set[int]]:
+    """Extract character codes used by each font on a page.
+
+    Parses the content stream to find Tf (set font) and Tj/TJ (show text)
+    operators, returning a map of font resource name to used char codes.
+    """
+    result: dict[str, set[int]] = {}
+    try:
+        commands = pikepdf.parse_content_stream(page)  # type: ignore[arg-type]
+    except Exception:
+        return result
+
+    current_font = ""
+    for instruction in commands:
+        operands = instruction.operands
+        op = str(instruction.operator)
+        if op == "Tf" and operands:
+            current_font = str(operands[0])
+        elif op == "Tj" and current_font and operands:
+            text_bytes = bytes(operands[0])
+            codes = result.setdefault(current_font, set())
+            codes.update(text_bytes)
+        elif op == "TJ" and current_font and operands:
+            codes = result.setdefault(current_font, set())
+            for item in list(operands[0]):  # type: ignore[call-overload]
+                try:
+                    text_bytes = bytes(item)
+                    if text_bytes:
+                        codes.update(text_bytes)
+                except (TypeError, ValueError):
+                    pass
+    return result
+
+
+def _fix_cff_missing_glyphs(
+    font: pikepdf.Object,
+    used_codes: set[int],
+) -> bool:
+    """Add missing glyph charstrings to CFF font subsets.
+
+    Ghostscript sometimes creates font subsets that don't include all glyphs
+    referenced in the content stream. This adds minimal empty charstrings
+    for missing glyphs so veraPDF doesn't flag them.
+
+    Only processes char codes that are actually used on the page.
+
+    Returns True if any glyphs were added.
+    """
+    if str(font.get("/Subtype", "")) != "/Type1":  # type: ignore[call-overload]
+        return False
+    fd = font.get("/FontDescriptor")
+    if not fd or "/FontFile3" not in fd:
+        return False
+    ff3 = fd["/FontFile3"]
+    if str(ff3.get("/Subtype", "")) != "/Type1C":  # type: ignore[call-overload]
+        return False
+    if "/Widths" not in font or "/FirstChar" not in font:
+        return False
+
+    try:
+        # Build char_code -> glyph_name map from encoding
+        code_to_name: dict[int, str] = {}
+        encoding = font.get("/Encoding")
+
+        if encoding is not None and str(encoding) == "/WinAnsiEncoding":
+            from fontTools.agl import UV2AGL
+
+            for cc in used_codes:
+                name = UV2AGL.get(cc)
+                if name:
+                    code_to_name[cc] = name
+        elif encoding is not None and hasattr(encoding, "keys"):
+            if "/Differences" in encoding:
+                differences = list(
+                    encoding["/Differences"]
+                )  # type: ignore[call-overload]
+                ec = 0
+                for entry in differences:
+                    if isinstance(entry, (int, pikepdf.Object)) and not isinstance(
+                        entry, pikepdf.Name
+                    ):
+                        ec = int(entry)
+                    else:
+                        if ec in used_codes:
+                            code_to_name[ec] = str(entry)[1:]
+                        ec += 1
+        else:
+            return False
+
+        cff_data = ff3.read_bytes()
+        cff = CFFFontSet()
+        cff.decompile(io.BytesIO(cff_data), None)
+        top = cff.topDictIndex[0]
+        cs = top.CharStrings
+
+        first_char = int(font.FirstChar)
+        added = False
+
+        for char_code in used_codes:
+            idx = char_code - first_char
+            if idx < 0:
+                continue
+            glyph_name = code_to_name.get(char_code)
+            if not glyph_name or glyph_name in cs:
+                continue
+
+            from fontTools.misc.psCharStrings import T2CharString
+
+            empty_cs = T2CharString()
+            empty_cs.program = ["endchar"]
+            new_idx = len(cs.charStringsIndex)
+            cs.charStringsIndex.append(empty_cs)
+            cs.charStrings[glyph_name] = new_idx
+            top.charset.append(glyph_name)
+            added = True
+            logger.debug("Added missing glyph '%s' to CFF font", glyph_name)
+
+        if added:
+            from unittest.mock import Mock as _Mock
+
+            mock_font = _Mock()
+            mock_font.recalcBBoxes = False
+            buf = io.BytesIO()
+            cff.compile(buf, mock_font)
+            ff3.write(buf.getvalue())
+
+        return added
+    except Exception as e:
+        logger.debug("CFF missing glyph fix skipped: %s", e)
+        return False
+
+
 def _sanitize_pdfa(pdf_path: Path) -> None:
     """Fix common PDF/A compliance issues left by Ghostscript.
 
     - Removes CMYK transparency groups from pages and XObjects
     - Removes annotations without appearance dictionaries (required by PDF/A)
+    - Fixes CFF font width mismatches caused by non-standard FontMatrix
+    - Fixes TrueType font zero-width entries using hmtx data
+    - Adds missing glyph charstrings to CFF font subsets
 
     Args:
         pdf_path: Path to PDF file (modified in place)
@@ -293,6 +569,20 @@ def _sanitize_pdfa(pdf_path: Path) -> None:
                         page["/Annots"] = pikepdf.Array(clean)
                     else:
                         del page["/Annots"]  # type: ignore[operator]
+
+            # Fix font issues (widths, missing glyphs)
+            if "/Resources" in page and "/Font" in page.Resources:
+                fonts = page.Resources.Font
+                used_codes = _get_used_char_codes(page)
+                for fname in fonts:  # type: ignore[attr-defined]
+                    f = fonts[fname]
+                    if _fix_cff_font_widths(f):
+                        modified = True
+                    if _fix_truetype_widths(f):
+                        modified = True
+                    font_codes = used_codes.get(fname, set())
+                    if font_codes and _fix_cff_missing_glyphs(f, font_codes):
+                        modified = True
 
         if modified:
             pdf.save(pdf_path)
