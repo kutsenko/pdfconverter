@@ -4,17 +4,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture(scope="session", autouse=True)
-def mock_ocrmypdf():
-    """Mock OCRmyPDF for all tests."""
+@pytest.fixture(autouse=True)
+def mock_ocrmypdf(request):
+    """Mock OCRmyPDF for all tests except real_conversion-marked tests."""
+    if request.node.get_closest_marker("real_conversion"):
+        yield None
+        return
     with patch("app.converter.ocrmypdf.ocr") as mock_ocr:
         mock_ocr.return_value = None  # ocrmypdf.ocr returns nothing
         yield mock_ocr
 
 
-@pytest.fixture(scope="session", autouse=True)
-def mock_pikepdf():
-    """Mock pikepdf for all tests."""
+@pytest.fixture(autouse=True)
+def mock_pikepdf(request):
+    """Mock pikepdf for all tests except real_conversion-marked tests."""
+    if request.node.get_closest_marker("real_conversion"):
+        yield None
+        return
     with patch("app.converter.pikepdf.open") as mock_open:
         # Mock PDF object (not tagged by default)
         mock_pdf = Mock()

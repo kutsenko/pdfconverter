@@ -245,10 +245,24 @@ def _clamp_content_stream(pdf: pikepdf.Pdf, page: pikepdf.Page) -> None:
         page.Contents = pdf.make_stream(new_data.encode("latin-1"))
 
 
+def _remove_cmyk_group(obj: object) -> bool:
+    """Remove CMYK transparency group from a PDF dictionary object.
+
+    Returns True if the object was modified.
+    """
+    if "/Group" not in obj:  # type: ignore[operator]
+        return False
+    group = obj.Group  # type: ignore[attr-defined]
+    if "/CS" in group and str(group.CS) == "/DeviceCMYK":
+        del obj["/Group"]  # type: ignore[attr-defined]
+        return True
+    return False
+
+
 def _sanitize_pdfa(pdf_path: Path) -> None:
     """Fix common PDF/A compliance issues left by Ghostscript.
 
-    - Removes CMYK transparency groups (invalid without CMYK output intent)
+    - Removes CMYK transparency groups from pages and XObjects
     - Removes annotations without appearance dictionaries (required by PDF/A)
 
     Args:
@@ -257,12 +271,17 @@ def _sanitize_pdfa(pdf_path: Path) -> None:
     with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
         modified = False
         for page in pdf.pages:
-            # Remove CMYK transparency groups
-            if "/Group" in page:
-                group = page.Group
-                if "/CS" in group and str(group.CS) == "/DeviceCMYK":
-                    del page["/Group"]  # type: ignore[operator]
-                    modified = True
+            # Remove CMYK transparency groups from page
+            if _remove_cmyk_group(page):
+                modified = True
+
+            # Remove CMYK transparency groups from Form XObjects
+            if "/Resources" in page and "/XObject" in page.Resources:
+                xobjects = page.Resources.XObject
+                for name in xobjects:  # type: ignore[attr-defined]
+                    xobj = xobjects[name]
+                    if _remove_cmyk_group(xobj):
+                        modified = True
 
             # Remove annotations without appearance dictionaries
             if "/Annots" in page:

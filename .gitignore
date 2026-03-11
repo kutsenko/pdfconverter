@@ -149,9 +149,10 @@ Thumbs.db
 # Docker
 *.log
 
-# Test PDFs
+# PDFs (except test fixtures)
 *.pdf
 !sample.pdf
+!data/test_pdfs/*.pdf
 
 # Temporary files
 tmp/
@@ -160,3 +161,4 @@ temp/
 
 # Claude Code
 .claude/
+.verapdf_tmp/
